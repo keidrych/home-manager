@@ -4642,7 +4642,7 @@ for the full list of options.
 <code class="filename">~/.config/mpv/mpv.conf</code>. See
 <span class="citerefentry"><span class="refentrytitle">mpv</span>(1)</span>
 for the full list of options.
-</p><p><span class="emphasis"><em>Type:</em></span> attribute set of string or signed integer or boolean or floating point numbers</p><p><span class="emphasis"><em>Default:</em></span> <code class="literal">
+</p><p><span class="emphasis"><em>Type:</em></span> attribute set of string or signed integer or boolean or floating point number or list of string or signed integer or boolean or floating point numberss</p><p><span class="emphasis"><em>Default:</em></span> <code class="literal">
         
         {
         
@@ -4659,7 +4659,7 @@ for the full list of options.
                 </a></code></td></tr></table></dd><dt><span class="term"><a id="opt-programs.mpv.profiles"></a><a class="term" href="options.html#opt-programs.mpv.profiles"><code class="option">programs.mpv.profiles</code></a></span></dt><dd><p>Sub-configuration options for specific profiles written to
 <code class="filename">~/.config/mpv/mpv.conf</code>. See
 <code class="option">programs.mpv.config</code> for more information.
-</p><p><span class="emphasis"><em>Type:</em></span> attribute set of attribute set of string or signed integer or boolean or floating point numberss</p><p><span class="emphasis"><em>Default:</em></span> <code class="literal">
+</p><p><span class="emphasis"><em>Type:</em></span> attribute set of attribute set of string or signed integer or boolean or floating point number or list of string or signed integer or boolean or floating point numbersss</p><p><span class="emphasis"><em>Default:</em></span> <code class="literal">
         
         {
         
@@ -9035,6 +9035,10 @@ special characters including spaces may need to be escaped.
       </code></p><p><span class="emphasis"><em>Example:</em></span> <code class="literal">
         true
       </code></p><p><span class="emphasis"><em>Declared by:</em></span></p><table border="0" summary="Simple list" class="simplelist"><tr><td><code class="filename"><a class="filename" href="https://github.com/nix-community/home-manager/blob/master/modules/services/parcellite.nix#blob-path" target="_top">
+                    &lt;home-manager/modules/services/parcellite.nix&gt;
+                </a></code></td></tr></table></dd><dt><span class="term"><a id="opt-services.parcellite.package"></a><a class="term" href="options.html#opt-services.parcellite.package"><code class="option">services.parcellite.package</code></a></span></dt><dd><p>Parcellite derivation to use.</p><p><span class="emphasis"><em>Type:</em></span> package</p><p><span class="emphasis"><em>Default:</em></span> <code class="literal">
+        pkgs.parcellite
+      </code></p><p><span class="emphasis"><em>Example:</em></span> </p><pre class="programlisting">pkgs.clipit</pre><p><span class="emphasis"><em>Declared by:</em></span></p><table border="0" summary="Simple list" class="simplelist"><tr><td><code class="filename"><a class="filename" href="https://github.com/nix-community/home-manager/blob/master/modules/services/parcellite.nix#blob-path" target="_top">
                     &lt;home-manager/modules/services/parcellite.nix&gt;
                 </a></code></td></tr></table></dd><dt><span class="term"><a id="opt-services.password-store-sync.enable"></a><a class="term" href="options.html#opt-services.password-store-sync.enable"><code class="option">services.password-store-sync.enable</code></a></span></dt><dd><p>Whether to enable Password store periodic sync.</p><p><span class="emphasis"><em>Type:</em></span> boolean</p><p><span class="emphasis"><em>Default:</em></span> <code class="literal">
         false

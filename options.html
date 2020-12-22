@@ -4508,6 +4508,12 @@ timeout, set it to zero.
         0
       </code></p><p><span class="emphasis"><em>Declared by:</em></span></p><table border="0" summary="Simple list" class="simplelist"><tr><td><code class="filename"><a class="filename" href="https://github.com/nix-community/home-manager/blob/master/modules/services/mako.nix#blob-path" target="_top">
                     &lt;home-manager/modules/services/mako.nix&gt;
+                </a></code></td></tr></table></dd><dt><span class="term"><a id="opt-programs.mako.extraConfig"></a><a class="term" href="options.html#opt-programs.mako.extraConfig"><code class="option">programs.mako.extraConfig</code></a></span></dt><dd><p>Additional configuration.</p><p><span class="emphasis"><em>Type:</em></span> strings concatenated with "\n"</p><p><span class="emphasis"><em>Default:</em></span> <code class="literal">
+        ""
+      </code></p><p><span class="emphasis"><em>Example:</em></span> </p><pre class="programlisting">[urgency=low]
+border-color=#b8bb26
+</pre><p><span class="emphasis"><em>Declared by:</em></span></p><table border="0" summary="Simple list" class="simplelist"><tr><td><code class="filename"><a class="filename" href="https://github.com/nix-community/home-manager/blob/master/modules/services/mako.nix#blob-path" target="_top">
+                    &lt;home-manager/modules/services/mako.nix&gt;
                 </a></code></td></tr></table></dd><dt><span class="term"><a id="opt-programs.mako.font"></a><a class="term" href="options.html#opt-programs.mako.font"><code class="option">programs.mako.font</code></a></span></dt><dd><p>Font to use, in Pango format.
 </p><p><span class="emphasis"><em>Type:</em></span> null or string</p><p><span class="emphasis"><em>Default:</em></span> <code class="literal">
         "monospace 10"
@@ -4732,6 +4738,11 @@ control the default matplotlib behavior.
                 </a></code></td></tr></table></dd><dt><span class="term"><a id="opt-programs.mcfly.enableFishIntegration"></a><a class="term" href="options.html#opt-programs.mcfly.enableFishIntegration"><code class="option">programs.mcfly.enableFishIntegration</code></a></span></dt><dd><p>Whether to enable Fish integration.
 </p><p><span class="emphasis"><em>Type:</em></span> boolean</p><p><span class="emphasis"><em>Default:</em></span> <code class="literal">
         true
+      </code></p><p><span class="emphasis"><em>Declared by:</em></span></p><table border="0" summary="Simple list" class="simplelist"><tr><td><code class="filename"><a class="filename" href="https://github.com/nix-community/home-manager/blob/master/modules/programs/mcfly.nix#blob-path" target="_top">
+                    &lt;home-manager/modules/programs/mcfly.nix&gt;
+                </a></code></td></tr></table></dd><dt><span class="term"><a id="opt-programs.mcfly.enableFuzzySearch"></a><a class="term" href="options.html#opt-programs.mcfly.enableFuzzySearch"><code class="option">programs.mcfly.enableFuzzySearch</code></a></span></dt><dd><p>Whether to enable fuzzy searching.
+</p><p><span class="emphasis"><em>Type:</em></span> boolean</p><p><span class="emphasis"><em>Default:</em></span> <code class="literal">
+        false
       </code></p><p><span class="emphasis"><em>Declared by:</em></span></p><table border="0" summary="Simple list" class="simplelist"><tr><td><code class="filename"><a class="filename" href="https://github.com/nix-community/home-manager/blob/master/modules/programs/mcfly.nix#blob-path" target="_top">
                     &lt;home-manager/modules/programs/mcfly.nix&gt;
                 </a></code></td></tr></table></dd><dt><span class="term"><a id="opt-programs.mcfly.enableLightTheme"></a><a class="term" href="options.html#opt-programs.mcfly.enableLightTheme"><code class="option">programs.mcfly.enableLightTheme</code></a></span></dt><dd><p>Whether to enable light mode theme.
@@ -6656,7 +6667,12 @@ of options.
     
       </code></p><p><span class="emphasis"><em>Example:</em></span> </p><pre class="programlisting">{
   add_newline = false;
-  prompt_order = [ "line_break" "package" "line_break" "character" ];
+  format = lib.concatStrings [
+    "$line_break"
+    "$package"
+    "$line_break"
+    "$character"
+  ];
   scan_timeout = 10;
   character.symbol = "➜";
 }

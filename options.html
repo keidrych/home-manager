@@ -9819,6 +9819,24 @@ desired.
                     &lt;home-manager/modules/services/dwm-status.nix&gt;
                 </a></code></td></tr></table></dd><dt><span class="term"><a id="opt-services.dwm-status.order"></a><a class="term" href="options.html#opt-services.dwm-status.order"><code class="option">services.dwm-status.order</code></a></span></dt><dd><p>List of enabled features in order.</p><p><span class="emphasis"><em>Type:</em></span> list of one of "audio", "backlight", "battery", "cpu_load", "network", "time"s</p><p><span class="emphasis"><em>Declared by:</em></span></p><table border="0" summary="Simple list" class="simplelist"><tr><td><code class="filename"><a class="filename" href="https://github.com/nix-community/home-manager/blob/master/modules/services/dwm-status.nix#blob-path" target="_top">
                     &lt;home-manager/modules/services/dwm-status.nix&gt;
+                </a></code></td></tr></table></dd><dt><span class="term"><a id="opt-services.easyeffects.enable"></a><a class="term" href="options.html#opt-services.easyeffects.enable"><code class="option">services.easyeffects.enable</code></a></span></dt><dd><p>Whether to enable Easyeffects daemon.
+Note, it is necessary to add
+</p><pre class="programlisting nix">
+services.dbus.packages = with pkgs; [ gnome.dconf ];
+</pre><p>
+to your system configuration for the daemon to work correctly
+.</p><p><span class="emphasis"><em>Type:</em></span> boolean</p><p><span class="emphasis"><em>Default:</em></span> <code class="literal">
+        false
+      </code></p><p><span class="emphasis"><em>Example:</em></span> <code class="literal">
+        true
+      </code></p><p><span class="emphasis"><em>Declared by:</em></span></p><table border="0" summary="Simple list" class="simplelist"><tr><td><code class="filename"><a class="filename" href="https://github.com/nix-community/home-manager/blob/master/modules/services/easyeffects.nix#blob-path" target="_top">
+                    &lt;home-manager/modules/services/easyeffects.nix&gt;
+                </a></code></td></tr></table></dd><dt><span class="term"><a id="opt-services.easyeffects.preset"></a><a class="term" href="options.html#opt-services.easyeffects.preset"><code class="option">services.easyeffects.preset</code></a></span></dt><dd><p>Which preset to use when starting easyeffects.
+Will likely need to launch easyeffects to initially create preset.
+</p><p><span class="emphasis"><em>Type:</em></span> string</p><p><span class="emphasis"><em>Default:</em></span> <code class="literal">
+        ""
+      </code></p><p><span class="emphasis"><em>Declared by:</em></span></p><table border="0" summary="Simple list" class="simplelist"><tr><td><code class="filename"><a class="filename" href="https://github.com/nix-community/home-manager/blob/master/modules/services/easyeffects.nix#blob-path" target="_top">
+                    &lt;home-manager/modules/services/easyeffects.nix&gt;
                 </a></code></td></tr></table></dd><dt><span class="term"><a id="opt-services.emacs.enable"></a><a class="term" href="options.html#opt-services.emacs.enable"><code class="option">services.emacs.enable</code></a></span></dt><dd><p>Whether to enable the Emacs daemon.</p><p><span class="emphasis"><em>Type:</em></span> boolean</p><p><span class="emphasis"><em>Default:</em></span> <code class="literal">
         false
       </code></p><p><span class="emphasis"><em>Example:</em></span> <code class="literal">
@@ -11155,8 +11173,8 @@ click-right=pavucontrol &amp;
       </code></p><p><span class="emphasis"><em>Declared by:</em></span></p><table border="0" summary="Simple list" class="simplelist"><tr><td><code class="filename"><a class="filename" href="https://github.com/nix-community/home-manager/blob/master/modules/services/pulseeffects.nix#blob-path" target="_top">
                     &lt;home-manager/modules/services/pulseeffects.nix&gt;
                 </a></code></td></tr></table></dd><dt><span class="term"><a id="opt-services.pulseeffects.package"></a><a class="term" href="options.html#opt-services.pulseeffects.package"><code class="option">services.pulseeffects.package</code></a></span></dt><dd><p>Pulseeffects package to use.</p><p><span class="emphasis"><em>Type:</em></span> package</p><p><span class="emphasis"><em>Default:</em></span> <code class="literal">
-        pkgs.pulseeffects
-      </code></p><p><span class="emphasis"><em>Example:</em></span> </p><pre class="programlisting">pkgs.pulseeffects-pw</pre><p><span class="emphasis"><em>Declared by:</em></span></p><table border="0" summary="Simple list" class="simplelist"><tr><td><code class="filename"><a class="filename" href="https://github.com/nix-community/home-manager/blob/master/modules/services/pulseeffects.nix#blob-path" target="_top">
+        pkgs.pulseeffects-legacy
+      </code></p><p><span class="emphasis"><em>Declared by:</em></span></p><table border="0" summary="Simple list" class="simplelist"><tr><td><code class="filename"><a class="filename" href="https://github.com/nix-community/home-manager/blob/master/modules/services/pulseeffects.nix#blob-path" target="_top">
                     &lt;home-manager/modules/services/pulseeffects.nix&gt;
                 </a></code></td></tr></table></dd><dt><span class="term"><a id="opt-services.pulseeffects.preset"></a><a class="term" href="options.html#opt-services.pulseeffects.preset"><code class="option">services.pulseeffects.preset</code></a></span></dt><dd><p>Which preset to use when starting pulseeffects.
 Will likely need to launch pulseeffects to initially create preset.

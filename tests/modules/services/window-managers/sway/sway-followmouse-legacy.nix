@@ -1,6 +1,4 @@
-{ config, lib, pkgs, ... }:
-
-with lib;
+{ config, pkgs, ... }:
 
 {
   imports = [ ./sway-stubs.nix ];
@@ -8,6 +6,7 @@ with lib;
   wayland.windowManager.sway = {
     enable = true;
     package = config.lib.test.mkStubPackage { outPath = "@sway@"; };
+    checkConfig = false;
 
     config = {
       focus.followMouse = false;
@@ -18,7 +17,7 @@ with lib;
 
   nmt.script = ''
     assertFileExists home-files/.config/sway/config
-    assertFileContent home-files/.config/sway/config \
+    assertFileContent $(normalizeStorePaths home-files/.config/sway/config) \
       ${./sway-followmouse-legacy-expected.conf}
   '';
 }

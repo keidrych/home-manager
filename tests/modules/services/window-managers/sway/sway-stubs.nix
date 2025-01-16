@@ -3,9 +3,9 @@
   # not containing hashes, version numbers etc.
   test.stubs = {
     dmenu = { };
-    rxvt-unicode-unwrapped = { };
+    foot = { };
     i3status = { };
-    sway = { };
+    sway = { version = "1"; };
     sway-unwrapped = { version = "1"; };
     swaybg = { };
     xwayland = { };

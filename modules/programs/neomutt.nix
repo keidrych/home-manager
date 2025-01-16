@@ -3,11 +3,63 @@
 with lib;
 
 let
-
   cfg = config.programs.neomutt;
 
   neomuttAccounts =
     filter (a: a.neomutt.enable) (attrValues config.accounts.email.accounts);
+
+  accountCommandNeeded = any (a:
+    a.neomutt.enable && (a.neomutt.mailboxType == "imap"
+      || (any (m: !isString m && m.type == "imap") a.neomutt.extraMailboxes)))
+    (attrValues config.accounts.email.accounts);
+
+  accountCommand = let
+    imapAccounts = filter (a:
+      a.neomutt.enable && a.imap.host != null && a.userName != null
+      && a.passwordCommand != null) (attrValues config.accounts.email.accounts);
+    accountCase = account:
+      let passwordCmd = toString account.passwordCommand;
+      in ''
+        ${account.userName}@${account.imap.host})
+            found=1
+            username="${account.userName}"
+            password="$(${passwordCmd})"
+            ;;'';
+  in pkgs.writeShellScriptBin "account-command.sh" ''
+    # Automatically set login variables based on the current account.
+    # This requires NeoMutt >= 2022-05-16
+
+    while [ ! -z "$1" ]; do
+      case "$1" in
+         --hostname)
+             shift
+             hostname="$1"
+             ;;
+         --username)
+             shift
+             username="$1@"
+             ;;
+         --type)
+            shift
+            type="$1"
+             ;;
+         *)
+            exit 1
+            ;;
+      esac
+    shift
+    done
+
+    found=
+    case "''${username}''${hostname}" in
+      ${concatMapStringsSep "\n" accountCase imapAccounts}
+    esac
+
+    if [ -n "$found" ]; then
+      echo "username: $username"
+      echo "password: $password"
+    fi
+  '';
 
   sidebarModule = types.submodule {
     options = {
@@ -78,7 +130,11 @@ let
       key = mkOption {
         type = types.str;
         example = "<left>";
-        description = "The key to bind.";
+        description = ''
+          The key to bind.
+
+          If you want to bind '\Cp' for example, which would be Ctrl + 'p', you need to escape twice: '\\Cp'!
+        '';
       };
 
       action = mkOption {
@@ -89,11 +145,33 @@ let
     };
   };
 
-  yesno = x: if x then "yes" else "no";
+  mkNotmuchVirtualboxes = virtualMailboxes:
+    "${concatStringsSep "\n" (map ({ name, query, limit, type }:
+      ''
+        virtual-mailboxes "${name}" "notmuch://?query=${lib.escapeURL query}${
+          optionalString (limit != null) "&limit=${toString limit}"
+        }${optionalString (type != null) "&type=${type}"}"'')
+      virtualMailboxes)}";
+
   setOption = n: v: if v == null then "unset ${n}" else "set ${n}=${v}";
   escape = replaceStrings [ "%" ] [ "%25" ];
 
   accountFilename = account: config.xdg.configHome + "/neomutt/" + account.name;
+
+  accountRootIMAP = account:
+    let
+      userName =
+        lib.optionalString (account.userName != null) "${account.userName}@";
+      port = lib.optionalString (account.imap.port != null)
+        ":${toString account.imap.port}";
+      protocol = if account.imap.tls.enable then "imaps" else "imap";
+    in "${protocol}://${userName}${account.imap.host}${port}";
+
+  accountRoot = account:
+    if account.neomutt.mailboxType == "imap" then
+      accountRootIMAP account
+    else
+      account.maildir.absPath;
 
   genCommonFolderHooks = account:
     with account; {
@@ -112,7 +190,8 @@ let
       sendmail = "'${neomutt.sendMailCommand}'";
     } else
       let
-        smtpProto = if smtp.tls.enable then "smtps" else "smtp";
+        smtpProto =
+          if smtp.tls.enable && !smtp.tls.useStartTls then "smtps" else "smtp";
         smtpPort = if smtp.port != null then ":${toString smtp.port}" else "";
         smtpBaseUrl =
           "${smtpProto}://${escape userName}@${smtp.host}${smtpPort}";
@@ -121,12 +200,12 @@ let
         smtp_pass = ''"`${passCmd}`"'';
       };
 
-  genMaildirAccountConfig = account:
+  genAccountConfig = account:
     with account;
     let
       folderHook = mapAttrsToList setOption (genCommonFolderHooks account
         // optionalAttrs cfg.changeFolderWhenSourcingAccount {
-          folder = "'${account.maildir.absPath}'";
+          folder = "'${accountRoot account}'";
         });
     in ''
       ${concatStringsSep "\n" folderHook}
@@ -138,36 +217,48 @@ let
         "mailboxes"
       else
         ''named-mailboxes "${account.neomutt.mailboxName}"'';
+      mailroot = accountRoot account;
+      hookName = if account.neomutt.mailboxType == "imap" then
+        "account-hook"
+      else
+        "folder-hook";
       extraMailboxes = concatMapStringsSep "\n" (extra:
-        if isString extra then
-          ''mailboxes "${account.maildir.absPath}/${extra}"''
+        let
+          mailboxroot = if !isString extra && extra.type == "imap" then
+            accountRootIMAP account
+          else if !isString extra && extra.type == "maildir" then
+            account.maildir.absPath
+          else
+            mailroot;
+        in if isString extra then
+          ''mailboxes "${mailboxroot}/${extra}"''
         else if extra.name == null then
-          ''mailboxes "${account.maildir.absPath}/${extra.mailbox}"''
+          ''mailboxes "${mailboxroot}/${extra.mailbox}"''
         else
-          ''
-            named-mailboxes "${extra.name}" "${account.maildir.absPath}/${extra.mailbox}"'')
+          ''named-mailboxes "${extra.name}" "${mailboxroot}/${extra.mailbox}"'')
         account.neomutt.extraMailboxes;
     in with account; ''
       # register account ${name}
-      ${mailboxes} "${maildir.absPath}/${folders.inbox}"
+      ${optionalString account.neomutt.showDefaultMailbox
+      ''${mailboxes} "${mailroot}/${folders.inbox}"''}
       ${extraMailboxes}
-      folder-hook ${maildir.absPath}/ " \
+      ${hookName} ${mailroot}/ " \
           source ${accountFilename account} "
     '';
 
   mraSection = account:
     with account;
-    if account.maildir != null then
-      genMaildirAccountConfig account
+    if account.imap.host != null || account.maildir != null then
+      genAccountConfig account
     else
-      throw "Only maildir is supported at the moment";
+      throw "Only maildir and IMAP is supported at the moment";
 
   optionsStr = attrs: concatStringsSep "\n" (mapAttrsToList setOption attrs);
 
   sidebarSection = ''
     # Sidebar
     set sidebar_visible = yes
-    set sidebar_short_path = ${yesno cfg.sidebar.shortPath}
+    set sidebar_short_path = ${lib.hm.booleans.yesNo cfg.sidebar.shortPath}
     set sidebar_width = ${toString cfg.sidebar.width}
     set sidebar_format = '${cfg.sidebar.format}'
   '';
@@ -189,23 +280,43 @@ let
   '';
 
   notmuchSection = account:
-    with account; ''
+    let virtualMailboxes = account.notmuch.neomutt.virtualMailboxes;
+    in with account; ''
       # notmuch section
       set nm_default_uri = "notmuch://${config.accounts.email.maildirBasePath}"
-      virtual-mailboxes "My INBOX" "notmuch://?query=tag:inbox"
+      ${optionalString
+      (notmuch.neomutt.enable && builtins.length virtualMailboxes > 0)
+      (mkNotmuchVirtualboxes virtualMailboxes)}
     '';
 
   accountStr = account:
     with account;
-    ''
-      # Generated by Home Manager.
-      set ssl_force_tls = yes
+    let
+      signature = if account.signature.showSignature == "none" then
+        "unset signature"
+      else if account.signature.command != null then
+        ''set signature = "${account.signature.command}|"''
+      else
+        "set signature = ${
+          pkgs.writeText "signature.txt" account.signature.text
+        }";
+    in ''
+      # Generated by Home Manager.${
+        optionalString cfg.unmailboxes ''
+
+          unmailboxes *
+        ''
+      }
+      set ssl_force_tls = ${
+        lib.hm.booleans.yesNo (imap.tls.enable || imap.tls.useStartTls)
+      }
       set certificate_file=${toString config.accounts.email.certificatesFile}
 
       # GPG section
-      set crypt_use_gpgme = yes
-      set crypt_autosign = ${yesno (gpg.signByDefault or false)}
-      set crypt_opportunistic_encrypt = ${yesno (gpg.encryptByDefault or false)}
+      set crypt_autosign = ${lib.hm.booleans.yesNo (gpg.signByDefault or false)}
+      set crypt_opportunistic_encrypt = ${
+        lib.hm.booleans.yesNo (gpg.encryptByDefault or false)
+      }
       set pgp_use_gpg_agent = yes
       set mbox_type = ${if maildir != null then "Maildir" else "mbox"}
       set sort = "${cfg.sort}"
@@ -222,9 +333,11 @@ let
 
       # Extra configuration
       ${account.neomutt.extraConfig}
-    '' + optionalString (account.signature.showSignature != "none") ''
-      set signature = ${pkgs.writeText "signature.txt" account.signature.text}
-    '' + optionalString account.notmuch.enable (notmuchSection account);
+
+      ${signature}
+    ''
+    + optionalString (account.notmuch.enable && account.notmuch.neomutt.enable)
+    (notmuchSection account);
 
 in {
   options = {
@@ -259,7 +372,12 @@ in {
       sort = mkOption {
         # allow users to choose any option from sortOptions, or any option prefixed with "reverse-"
         type = types.enum
-          (sortOptions ++ (map (option: "reverse-" + option) sortOptions));
+          (builtins.concatMap (_pre: map (_opt: _pre + _opt) sortOptions) [
+            ""
+            "reverse-"
+            "last-"
+            "reverse-last-"
+          ]);
         default = "threads";
         description = "Sorting method on messages.";
       };
@@ -294,6 +412,22 @@ in {
           default = true;
         };
 
+      sourcePrimaryAccount =
+        mkEnableOption "source the primary account by default" // {
+          default = true;
+        };
+
+      unmailboxes = mkOption {
+        type = types.bool;
+        default = false;
+        description = ''
+          Set `unmailboxes *` at the start of account configurations.
+          It removes previous sidebar mailboxes when sourcing an account configuration.
+
+          See <http://www.mutt.org/doc/manual/#mailboxes> for more information.
+        '';
+      };
+
       extraConfig = mkOption {
         type = types.lines;
         default = "";
@@ -326,10 +460,14 @@ in {
         set message_cachedir = "${config.xdg.cacheHome}/neomutt/messages/"
         set editor = "${cfg.editor}"
         set implicit_autoview = yes
+        set crypt_use_gpgme = yes
 
         alternative_order text/enriched text/plain text
 
         set delete = yes
+
+        ${optionalString cfg.vimKeys
+        "source ${pkgs.neomutt}/share/doc/neomutt/vim-keys/vim-keys.rc"}
 
         # Binds
         ${bindSection}
@@ -337,14 +475,16 @@ in {
         # Macros
         ${macroSection}
 
-        ${optionalString cfg.vimKeys
-        "source ${pkgs.neomutt}/share/doc/neomutt/vim-keys/vim-keys.rc"}
-
         # Register accounts
-        ${concatMapStringsSep "\n" registerAccount neomuttAccounts}
+        ${
+          optionalString (accountCommandNeeded) ''
+            set account_command = '${accountCommand}/bin/account-command.sh'
+          ''
+        }${concatMapStringsSep "\n" registerAccount neomuttAccounts}
 
-        # Source primary account
-        source ${accountFilename primary}
+        ${optionalString cfg.sourcePrimaryAccount ''
+          # Source primary account
+          source ${accountFilename primary}''}
 
         # Extra configuration
         ${optionsStr cfg.settings}

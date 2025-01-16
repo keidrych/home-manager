@@ -7,7 +7,7 @@
   };
 
   test.stubs = {
-    atuin = { };
+    atuin = { name = "atuin"; };
     bash-preexec = { };
   };
 
@@ -15,6 +15,6 @@
     assertFileExists home-files/.zshrc
     assertFileContains \
       home-files/.zshrc \
-      'eval "$(@atuin@/bin/atuin init zsh)"'
+      'eval "$(@atuin@/bin/atuin init zsh )"'
   '';
 }

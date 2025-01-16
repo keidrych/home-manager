@@ -16,8 +16,8 @@ in {
     programs.java = {
       enable = mkEnableOption "" // {
         description = ''
-          Install the Java development kit and set the <envar>JAVA_HOME</envar>
-          variable.
+          Install the Java development kit and set the
+          {env}`JAVA_HOME` variable.
         '';
       };
 
@@ -27,7 +27,7 @@ in {
         defaultText = "pkgs.jdk";
         description = ''
           Java package to install. Typical values are
-          <literal>pkgs.jdk</literal> or <literal>pkgs.jre</literal>.
+          `pkgs.jdk` or `pkgs.jre`.
         '';
       };
     };
@@ -36,11 +36,8 @@ in {
   config = mkIf cfg.enable {
     home.packages = [ cfg.package ];
 
-    home.sessionVariables = {
-      JAVA_HOME = fileContents (pkgs.runCommandLocal "java-home" { } ''
-        source "${cfg.package}/nix-support/setup-hook"
-        echo "$JAVA_HOME" > $out
-      '');
-    };
+    # some instances of `jdk-linux-base.nix` pass through `result` without turning it onto a path-string.
+    # while I suspect this is incorrect, the documentation is unclear.
+    home.sessionVariables.JAVA_HOME = "${cfg.package.home}";
   };
 }

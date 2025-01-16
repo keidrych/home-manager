@@ -9,6 +9,7 @@
   wayland.windowManager.sway = {
     enable = true;
     package = null;
+    checkConfig = false;
     config.menu = "${pkgs.dmenu}/bin/dmenu_run";
   };
 
@@ -21,7 +22,7 @@
 
   nmt.script = ''
     assertFileExists home-files/.config/sway/config
-    assertFileContent home-files/.config/sway/config \
+    assertFileContent $(normalizeStorePaths home-files/.config/sway/config) \
       ${./sway-null-package.conf}
   '';
 }

@@ -30,8 +30,8 @@ in {
         type = types.str;
         description = ''
           Server to connect to formatted as
-          <literal>&lt;host&gt;[:&lt;port&gt;]</literal>.
-          Port defaults to <literal>24800</literal>.
+          `<host>[:<port>]`.
+          Port defaults to `24800`.
         '';
       };
 
@@ -46,8 +46,8 @@ in {
         default = [ "-f" ];
         defaultText = literalExpression ''[ "-f" ]'';
         description = ''
-          Additional flags to pass to <command>barrierc</command>.
-          See <command>barrierc --help</command>.
+          Additional flags to pass to {command}`barrierc`.
+          See {command}`barrierc --help`.
         '';
       };
 
@@ -70,7 +70,7 @@ in {
       Service.ExecStart = with cfg.client;
         toString ([ "${pkgs.barrier}/bin/barrierc" ]
           ++ optional (name != null) "--name ${name}"
-          ++ optional enableCrypto "--enable-crypto"
+          ++ optional (!enableCrypto) "--disable-crypto"
           ++ optional enableDragDrop "--enable-drag-drop" ++ extraFlags
           ++ [ server ]);
     };

@@ -18,9 +18,7 @@ let
     rec {
       int = toString option;
       float = int;
-
-      bool = if option then "yes" else "no";
-
+      bool = lib.hm.booleans.yesNo option;
       string = option;
     }.${typeOf option};
 
@@ -33,6 +31,12 @@ let
   renderOptions = generators.toKeyValue {
     mkKeyValue =
       generators.mkKeyValueDefault { mkValueString = renderOptionValue; } "=";
+    listsAsDuplicateKeys = true;
+  };
+
+  renderScriptOptions = generators.toKeyValue {
+    mkKeyValue =
+      generators.mkKeyValueDefault { mkValueString = renderOption; } "=";
     listsAsDuplicateKeys = true;
   };
 
@@ -51,8 +55,10 @@ let
 
   mpvPackage = if cfg.scripts == [ ] then
     cfg.package
+  else if hasAttr "wrapMpv" pkgs then
+    pkgs.wrapMpv pkgs.mpv-unwrapped { scripts = cfg.scripts; }
   else
-    pkgs.wrapMpv pkgs.mpv-unwrapped { scripts = cfg.scripts; };
+    pkgs.mpv.override { scripts = cfg.scripts; };
 
 in {
   options = {
@@ -79,7 +85,7 @@ in {
       };
 
       scripts = mkOption {
-        type = with types; listOf (either package str);
+        type = with types; listOf package;
         default = [ ];
         example = literalExpression "[ pkgs.mpvScripts.mpris ]";
         description = ''
@@ -87,14 +93,29 @@ in {
         '';
       };
 
+      scriptOpts = mkOption {
+        description = ''
+          Script options added to
+          {file}`$XDG_CONFIG_HOME/mpv/script-opts/`. See
+          {manpage}`mpv(1)`
+          for the full list of options of builtin scripts.
+        '';
+        type = types.attrsOf mpvOptions;
+        default = { };
+        example = {
+          osc = {
+            scalewindowed = 2.0;
+            vidscale = false;
+            visibility = "always";
+          };
+        };
+      };
+
       config = mkOption {
         description = ''
           Configuration written to
-          <filename>$XDG_CONFIG_HOME/mpv/mpv.conf</filename>. See
-          <citerefentry>
-            <refentrytitle>mpv</refentrytitle>
-            <manvolnum>1</manvolnum>
-          </citerefentry>
+          {file}`$XDG_CONFIG_HOME/mpv/mpv.conf`. See
+          {manpage}`mpv(1)`
           for the full list of options.
         '';
         type = mpvOptions;
@@ -112,8 +133,8 @@ in {
       profiles = mkOption {
         description = ''
           Sub-configuration options for specific profiles written to
-          <filename>$XDG_CONFIG_HOME/mpv/mpv.conf</filename>. See
-          <option>programs.mpv.config</option> for more information.
+          {file}`$XDG_CONFIG_HOME/mpv/mpv.conf`. See
+          {option}`programs.mpv.config` for more information.
         '';
         type = mpvProfiles;
         default = { };
@@ -133,7 +154,7 @@ in {
       defaultProfiles = mkOption {
         description = ''
           Profiles to be applied by default. Options set by them are overridden
-          by options set in <xref linkend="opt-programs.mpv.config"/>.
+          by options set in [](#opt-programs.mpv.config).
         '';
         type = mpvDefaultProfiles;
         default = [ ];
@@ -143,11 +164,8 @@ in {
       bindings = mkOption {
         description = ''
           Input configuration written to
-          <filename>$XDG_CONFIG_HOME/mpv/input.conf</filename>. See
-          <citerefentry>
-            <refentrytitle>mpv</refentrytitle>
-            <manvolnum>1</manvolnum>
-          </citerefentry>
+          {file}`$XDG_CONFIG_HOME/mpv/input.conf`. See
+          {manpage}`mpv(1)`
           for the full list of options.
         '';
         type = mpvBindings;
@@ -158,6 +176,20 @@ in {
             WHEEL_DOWN = "seek -10";
             "Alt+0" = "set window-scale 0.5";
           }
+        '';
+      };
+
+      extraInput = mkOption {
+        description = ''
+          Additional lines that are appended to {file}`$XDG_CONFIG_HOME/mpv/input.conf`.
+           See {manpage}`mpv(1)` for the full list of options.
+        '';
+        type = with types; lines;
+        default = "";
+        example = ''
+          esc         quit                        #! Quit
+          #           script-binding uosc/video   #! Video tracks
+          # additional comments
         '';
       };
     };
@@ -183,10 +215,19 @@ in {
         ${optionalString (cfg.profiles != { }) (renderProfiles cfg.profiles)}
       '';
     })
-    (mkIf (cfg.bindings != { }) {
-      xdg.configFile."mpv/input.conf".text = renderBindings cfg.bindings;
+    (mkIf (cfg.bindings != { } || cfg.extraInput != "") {
+      xdg.configFile."mpv/input.conf".text = mkMerge [
+        (mkIf (cfg.bindings != { }) (renderBindings cfg.bindings))
+        (mkIf (cfg.extraInput != "") cfg.extraInput)
+      ];
     })
+    {
+      xdg.configFile = mapAttrs' (name: value:
+        nameValuePair "mpv/script-opts/${name}.conf" {
+          text = renderScriptOptions value;
+        }) cfg.scriptOpts;
+    }
   ]);
 
-  meta.maintainers = with maintainers; [ tadeokondrak thiagokokada ];
+  meta.maintainers = with maintainers; [ thiagokokada chuangzhu ];
 }

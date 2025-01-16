@@ -4,16 +4,26 @@ with lib;
 
 let
 
-  cfg = config.programs.mako;
+  cfg = config.services.mako;
 
 in {
   meta.maintainers = [ maintainers.onny ];
 
+  imports =
+    [ (mkRenamedOptionModule [ "programs" "mako" ] [ "services" "mako" ]) ];
+
   options = {
-    programs.mako = {
+    services.mako = {
       enable = mkEnableOption ''
         Mako, lightweight notification daemon for Wayland
       '';
+
+      package = mkOption {
+        type = types.package;
+        default = pkgs.mako;
+        defaultText = literalExpression "pkgs.mako";
+        description = "The mako package to use.";
+      };
 
       maxVisible = mkOption {
         default = 5;
@@ -65,12 +75,14 @@ in {
           "bottom-right"
           "bottom-center"
           "bottom-left"
+          "center-right"
+          "center-left"
           "center"
         ]);
         description = ''
           Show notifications at the specified position on the output.
           Supported values are top-right, top-center, top-left, bottom-right,
-          bottom-center, bottom-left, and center.
+          bottom-center, bottom-left, center-right, center-left and center.
         '';
       };
 
@@ -122,9 +134,9 @@ in {
         type = types.nullOr types.str;
         description = ''
           Set margin of each edge specified in pixels. Specify single value to
-          apply margin on all sides. Two comma-seperated values will set
-          vertical and horizontal edges seperately. Four comma-seperated will
-          give each edge a seperate value.
+          apply margin on all sides. Two comma-separated values will set
+          vertical and horizontal edges separately. Four comma-separated will
+          give each edge a separate value.
           For example: 10,20,5 will set top margin to 10, left and right to 20
           and bottom to five.
         '';
@@ -135,9 +147,9 @@ in {
         type = types.nullOr types.str;
         description = ''
           Set padding of each edge specified in pixels. Specify single value to
-          apply margin on all sides. Two comma-seperated values will set
-          vertical and horizontal edges seperately. Four comma-seperated will
-          give each edge a seperate value.
+          apply margin on all sides. Two comma-separated values will set
+          vertical and horizontal edges separately. Four comma-separated will
+          give each edge a separate value.
           For example: 10,20,5 will set top margin to 10, left and right to 20
           and bottom to five.
         '';
@@ -175,8 +187,8 @@ in {
           Set popup progress indicator color to a specific color,
           represented in hex color code. To draw the progress
           indicator on top of the background color, use the
-          <literal>over</literal> attribute. To replace the background
-          color, use the <literal>source</literal> attribute (this can
+          `over` attribute. To replace the background
+          color, use the `source` attribute (this can
           be useful when the notification is semi-transparent).
         '';
       };
@@ -206,9 +218,9 @@ in {
           algorithm used by the XDG Icon Theme Specification, but does not
           support any of the theme metadata. Therefore, if you want to search
           parent themes, you'll need to add them to the path manually.
-          </para><para>
-          The <filename>/usr/share/icons/hicolor</filename> and
-          <filename>/usr/share/pixmaps</filename> directories are
+
+          The {file}`/usr/share/icons/hicolor` and
+          {file}`/usr/share/pixmaps` directories are
           always searched.
         '';
       };
@@ -295,11 +307,11 @@ in {
     assertions =
       [ (hm.assertions.assertPlatform "services.mako" pkgs platforms.linux) ];
 
-    home.packages = [ pkgs.mako ];
+    home.packages = [ cfg.package ];
 
     xdg.configFile."mako/config" = {
       onChange = ''
-        ${pkgs.mako}/bin/makoctl reload || true
+        ${cfg.package}/bin/makoctl reload || true
       '';
       text = ''
         ${optionalInteger "max-visible" cfg.maxVisible}

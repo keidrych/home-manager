@@ -24,10 +24,16 @@ in {
   };
 
   config = mkIf config.services.taffybar.enable {
+    assertions = [
+      (hm.assertions.assertPlatform "services.taffybar" pkgs platforms.linux)
+    ];
+
     systemd.user.services.taffybar = {
       Unit = {
         Description = "Taffybar desktop bar";
         PartOf = [ "tray.target" ];
+        StartLimitBurst = 5;
+        StartLimitIntervalSec = 10;
       };
 
       Service = {
@@ -35,6 +41,7 @@ in {
         BusName = "org.taffybar.Bar";
         ExecStart = "${cfg.package}/bin/taffybar";
         Restart = "on-failure";
+        RestartSec = "2s";
       };
 
       Install = { WantedBy = [ "tray.target" ]; };

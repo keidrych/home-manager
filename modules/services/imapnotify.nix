@@ -6,7 +6,9 @@ let
 
   cfg = config.services.imapnotify;
 
-  safeName = lib.replaceChars [ "@" ":" "\\" "[" "]" ] [ "-" "-" "-" "" "" ];
+  safeName = lib.replaceStrings [ "@" ":" "\\" "[" "]" ] [ "-" "-" "-" "" "" ];
+
+  configName = account: "imapnotify-${safeName account.name}-config.json";
 
   imapnotifyAccounts =
     filter (a: a.imapnotify.enable) (attrValues config.accounts.email.accounts);
@@ -19,23 +21,45 @@ let
         Unit = { Description = "imapnotify for ${name}"; };
 
         Service = {
-          ExecStart = "${pkgs.goimapnotify}/bin/goimapnotify -conf ${
-              genAccountConfig account
-            }";
+          # Use the nix store path for config to ensure service restarts when it changes
+          ExecStart =
+            "${getExe cfg.package} -conf '${genAccountConfig account}'";
           Restart = "always";
           RestartSec = 30;
           Type = "simple";
-        } // optionalAttrs account.notmuch.enable {
-          Environment =
-            "NOTMUCH_CONFIG=${config.xdg.configHome}/notmuch/notmuchrc";
+          Environment = [ "PATH=${cfg.path}" ]
+            ++ optional account.notmuch.enable
+            "NOTMUCH_CONFIG=${config.xdg.configHome}/notmuch/default/config";
         };
 
         Install = { WantedBy = [ "default.target" ]; };
       };
     };
 
+  genAccountAgent = account:
+    let name = safeName account.name;
+    in {
+      name = "imapnotify-${name}";
+      value = {
+        enable = true;
+        config = {
+          # Use the nix store path for config to ensure service restarts when it changes
+          ProgramArguments =
+            [ "${getExe cfg.package}" "-conf" "${genAccountConfig account}" ];
+          KeepAlive = true;
+          ThrottleInterval = 30;
+          ExitTimeOut = 0;
+          ProcessType = "Background";
+          RunAtLoad = true;
+        } // optionalAttrs account.notmuch.enable {
+          EnvironmentVariables.NOTMUCH_CONFIG =
+            "${config.xdg.configHome}/notmuch/default/config";
+        };
+      };
+    };
+
   genAccountConfig = account:
-    pkgs.writeText "imapnotify-${safeName account.name}-config.json" (let
+    pkgs.writeText (configName account) (let
       port = if account.imap.port != null then
         account.imap.port
       else if account.imap.tls.enable then
@@ -48,6 +72,7 @@ let
       inherit (account.imap) host;
       inherit port;
       tls = account.imap.tls.enable;
+      tlsOptions.starttls = account.imap.tls.useStartTls;
       username = account.userName;
       passwordCmd =
         lib.concatMapStringsSep " " lib.escapeShellArg account.passwordCommand;
@@ -62,10 +87,33 @@ in {
   meta.maintainers = [ maintainers.nickhu ];
 
   options = {
-    services.imapnotify = { enable = mkEnableOption "imapnotify"; };
+    services.imapnotify = {
+      enable = mkEnableOption "imapnotify";
+
+      package = mkOption {
+        type = types.package;
+        default = pkgs.goimapnotify;
+        defaultText = literalExpression "pkgs.goimapnotify";
+        example = literalExpression "pkgs.imapnotify";
+        description = "The imapnotify package to use";
+      };
+
+      path = mkOption {
+        type = types.listOf types.package;
+        apply = lib.makeBinPath;
+        default = [ ];
+        description = ''
+          List of packages to provide in PATH for the imapnotify service.
+
+          Note, this does not apply to the Darwin launchd service.
+        '';
+      };
+    };
 
     accounts.email.accounts = mkOption {
-      type = with types; attrsOf (submodule (import ./imapnotify-accounts.nix));
+      type = with types;
+        attrsOf
+        (submodule (import ./imapnotify-accounts.nix { inherit pkgs lib; }));
     };
   };
 
@@ -79,14 +127,25 @@ in {
             + concatMapStringsSep ", " (a: a.name) badAccounts;
         };
     in [
-      (lib.hm.assertions.assertPlatform "services.imapnotify" pkgs
-        lib.platforms.linux)
       (checkAccounts (a: a.maildir == null) "maildir configuration")
       (checkAccounts (a: a.imap == null) "IMAP configuration")
       (checkAccounts (a: a.passwordCommand == null) "password command")
       (checkAccounts (a: a.userName == null) "username")
     ];
 
+    services.imapnotify.path = lib.mkMerge [
+      (lib.mkIf config.programs.notmuch.enable [ pkgs.notmuch ])
+      (lib.mkIf config.programs.mbsync.enable
+        [ config.programs.mbsync.package ])
+    ];
+
     systemd.user.services = listToAttrs (map genAccountUnit imapnotifyAccounts);
+
+    launchd.agents = listToAttrs (map genAccountAgent imapnotifyAccounts);
+
+    xdg.configFile = listToAttrs (map (account: {
+      name = "imapnotify/${configName account}";
+      value.source = genAccountConfig account;
+    }) imapnotifyAccounts);
   };
 }

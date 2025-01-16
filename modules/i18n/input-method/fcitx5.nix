@@ -5,7 +5,8 @@ with lib;
 let
   im = config.i18n.inputMethod;
   cfg = im.fcitx5;
-  fcitx5Package = pkgs.fcitx5-with-addons.override { inherit (cfg) addons; };
+  fcitx5Package =
+    pkgs.libsForQt5.fcitx5-with-addons.override { inherit (cfg) addons; };
 in {
   options = {
     i18n.inputMethod.fcitx5 = {
@@ -24,9 +25,12 @@ in {
     i18n.inputMethod.package = fcitx5Package;
 
     home.sessionVariables = {
+      GLFW_IM_MODULE = "ibus"; # IME support in kitty
       GTK_IM_MODULE = "fcitx";
       QT_IM_MODULE = "fcitx";
       XMODIFIERS = "@im=fcitx";
+      QT_PLUGIN_PATH =
+        "$QT_PLUGIN_PATH\${QT_PLUGIN_PATH:+:}${fcitx5Package}/${pkgs.qt6.qtbase.qtPluginPrefix}";
     };
 
     systemd.user.services.fcitx5-daemon = {

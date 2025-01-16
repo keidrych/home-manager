@@ -10,7 +10,7 @@ in {
       type = types.package;
       default = pkgs.nix-index;
       defaultText = literalExpression "pkgs.nix-index";
-      description = "Package providing the <command>nix-index</command> tool.";
+      description = "Package providing the {command}`nix-index` tool.";
     };
 
     enableBashIntegration = mkEnableOption "Bash integration" // {
@@ -48,7 +48,7 @@ in {
     '';
 
     # See https://github.com/bennofs/nix-index/issues/126
-    programs.fish.shellInit = let
+    programs.fish.interactiveShellInit = let
       wrapper = pkgs.writeScript "command-not-found" ''
         #!${pkgs.bash}/bin/bash
         source ${cfg.package}/etc/profile.d/command-not-found.sh

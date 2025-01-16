@@ -23,13 +23,14 @@ let
     ${concatStringsSep " " (notEmpty [
       "${cfg.package}/bin/xidlehook"
       (optionalString cfg.once "--once")
+      (optionalString cfg.detect-sleep "--detect-sleep")
       (optionalString cfg.not-when-fullscreen "--not-when-fullscreen")
       (optionalString cfg.not-when-audio "--not-when-audio")
       timers
     ])}
   '';
 in {
-  meta.maintainers = [ maintainers.dschrempf ];
+  meta.maintainers = [ maintainers.dschrempf hm.maintainers.bertof ];
 
   options.services.xidlehook = {
     enable = mkEnableOption "xidlehook systemd service";
@@ -51,9 +52,12 @@ in {
       '';
       description = ''
         Extra environment variables to be exported in the script.
-        These options are passed unescaped as <code>export name=value</code>.
+        These options are passed unescaped as `export name=value`.
       '';
     };
+
+    detect-sleep = mkEnableOption
+      "detecting when the system wakes up from a suspended state and resetting the idle timer";
 
     not-when-fullscreen = mkOption {
       type = types.bool;
@@ -123,10 +127,10 @@ in {
       '';
       description = ''
         A set of commands to be executed after a specific idle timeout.
-        The commands specified in <literal>command</literal> and <literal>canceller</literal>
+        The commands specified in `command` and `canceller`
         are passed escaped to the script.
         To use or re-use environment variables that are script-dependent, specify them
-        in the <literal>environment</literal> section.
+        in the `environment` section.
       '';
     };
   };

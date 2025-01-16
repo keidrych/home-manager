@@ -18,24 +18,10 @@ with lib;
       };
     };
 
-    nmt.script = let
-      configDir = if pkgs.stdenv.isDarwin then
-        "home-files/Library/Application Support"
-      else
-        "home-files/.config";
-    in ''
+    nmt.script = ''
       assertFileContent \
-        "${configDir}/bottom/bottom.toml" \
-        ${
-          builtins.toFile "example-settings-expected.toml" ''
-            [colors]
-            low_battery_color = "red"
-
-            [flags]
-            avg_cpu = true
-            temperature_type = "c"
-          ''
-        }
+        "home-files/.config/bottom/bottom.toml" \
+        ${./example-settings-expected.toml}
     '';
   };
 }

@@ -1,120 +1,170 @@
 { pkgs
 
 # Note, this should be "the standard library" + HM extensions.
-, lib ? import ../modules/lib/stdlib-extended.nix pkgs.lib }:
+, lib ? import ../modules/lib/stdlib-extended.nix pkgs.lib
+
+, release, isReleaseBranch }:
 
 let
 
-  nmdSrc = pkgs.fetchFromGitLab {
-    name = "nmd";
-    owner = "rycee";
-    repo = "nmd";
-    rev = "527245ff605bde88c2dd2ddae21c6479bb7cf8aa";
-    sha256 = "1zi0f9y3wq4bpslx1py3sfgrgd9av41ahpandvs6rvkpisfsqqlp";
-  };
-
-  nmd = import nmdSrc { inherit lib pkgs; };
+  # Recursively replace each derivation in the given attribute set
+  # with the same derivation but with the `outPath` attribute set to
+  # the string `"\${pkgs.attribute.path}"`. This allows the
+  # documentation to refer to derivations through their values without
+  # establishing an actual dependency on the derivation output.
+  #
+  # This is not perfect, but it seems to cover a vast majority of use
+  # cases.
+  #
+  # Caveat: even if the package is reached by a different means, the
+  # path above will be shown and not e.g.
+  # `${config.services.foo.package}`.
+  scrubDerivations = prefixPath: attrs:
+    let
+      scrubDerivation = name: value:
+        let pkgAttrName = prefixPath + "." + name;
+        in if lib.isAttrs value then
+          scrubDerivations pkgAttrName value
+          // lib.optionalAttrs (lib.isDerivation value) {
+            outPath = "\${${pkgAttrName}}";
+          }
+        else
+          value;
+    in lib.mapAttrs scrubDerivation attrs;
 
   # Make sure the used package is scrubbed to avoid actually
   # instantiating derivations.
   scrubbedPkgsModule = {
     imports = [{
       _module.args = {
-        pkgs = lib.mkForce (nmd.scrubDerivations "pkgs" pkgs);
+        pkgs = lib.mkForce (scrubDerivations "pkgs" pkgs);
         pkgs_i686 = lib.mkForce { };
       };
     }];
   };
 
-  buildModulesDocs = args:
-    nmd.buildModulesDocs ({
-      moduleRootPaths = [ ./.. ];
-      mkModuleUrl = path:
-        "https://github.com/nix-community/home-manager/blob/master/${path}#blob-path";
-      channelName = "home-manager";
-    } // args);
+  dontCheckDefinitions = { _module.check = false; };
 
-  hmModulesDocs = buildModulesDocs {
+  gitHubDeclaration = user: repo: subpath:
+    let urlRef = if isReleaseBranch then "release-${release}" else "master";
+    in {
+      url = "https://github.com/${user}/${repo}/blob/${urlRef}/${subpath}";
+      name = "<${repo}/${subpath}>";
+    };
+
+  hmPath = toString ./..;
+
+  buildOptionsDocs = args@{ modules, includeModuleSystemOptions ? true, ... }:
+    let
+      options = (lib.evalModules {
+        inherit modules;
+        class = "homeManager";
+      }).options;
+    in pkgs.buildPackages.nixosOptionsDoc ({
+      options = if includeModuleSystemOptions then
+        options
+      else
+        builtins.removeAttrs options [ "_module" ];
+      transformOptions = opt:
+        opt // {
+          # Clean up declaration sites to not refer to the Home Manager
+          # source tree.
+          declarations = map (decl:
+            if lib.hasPrefix hmPath (toString decl) then
+              gitHubDeclaration "nix-community" "home-manager"
+              (lib.removePrefix "/" (lib.removePrefix hmPath (toString decl)))
+            else if decl == "lib/modules.nix" then
+            # TODO: handle this in a better way (may require upstream
+            # changes to nixpkgs)
+              gitHubDeclaration "NixOS" "nixpkgs" decl
+            else
+              decl) opt.declarations;
+        };
+    } // builtins.removeAttrs args [ "modules" "includeModuleSystemOptions" ]);
+
+  hmOptionsDocs = buildOptionsDocs {
     modules = import ../modules/modules.nix {
       inherit lib pkgs;
       check = false;
     } ++ [ scrubbedPkgsModule ];
-    docBook.id = "home-manager-options";
+    variablelistId = "home-manager-options";
   };
 
-  nixosModuleDocs = buildModulesDocs {
-    modules = let
-      nixosModule = module: pkgs.path + "/nixos/modules" + module;
-      mockedNixos = with lib; {
-        options = {
-          environment.pathsToLink = mkSinkUndeclaredOptions { };
-          systemd.services = mkSinkUndeclaredOptions { };
-          users.users = mkSinkUndeclaredOptions { };
-        };
-      };
-    in [
-      ../nixos/default.nix
-      mockedNixos
-      (nixosModule "/misc/assertions.nix")
-      scrubbedPkgsModule
-    ];
-    docBook = {
-      id = "nixos-options";
-      optionIdPrefix = "nixos-opt";
+  nixosOptionsDocs = buildOptionsDocs {
+    modules = [ ../nixos scrubbedPkgsModule dontCheckDefinitions ];
+    includeModuleSystemOptions = false;
+    variablelistId = "nixos-options";
+    optionIdPrefix = "nixos-opt-";
+  };
+
+  nixDarwinOptionsDocs = buildOptionsDocs {
+    modules = [ ../nix-darwin scrubbedPkgsModule dontCheckDefinitions ];
+    includeModuleSystemOptions = false;
+    variablelistId = "nix-darwin-options";
+    optionIdPrefix = "nix-darwin-opt-";
+  };
+
+  release-config = builtins.fromJSON (builtins.readFile ../release.json);
+  revision = "release-${release-config.release}";
+  # Generate the `man home-configuration.nix` package
+  home-configuration-manual =
+    pkgs.runCommand "home-configuration-reference-manpage" {
+      nativeBuildInputs =
+        [ pkgs.buildPackages.installShellFiles pkgs.nixos-render-docs ];
+      allowedReferences = [ "out" ];
+    } ''
+      # Generate manpages.
+      mkdir -p $out/share/man/man5
+      mkdir -p $out/share/man/man1
+      nixos-render-docs -j $NIX_BUILD_CORES options manpage \
+        --revision ${revision} \
+        --header ${./home-configuration-nix-header.5} \
+        --footer ${./home-configuration-nix-footer.5} \
+        ${hmOptionsDocs.optionsJSON}/share/doc/nixos/options.json \
+        $out/share/man/man5/home-configuration.nix.5
+      cp ${./home-manager.1} $out/share/man/man1/home-manager.1
+    '';
+  # Generate the HTML manual pages
+  home-manager-manual = pkgs.callPackage ./home-manager-manual.nix {
+    home-manager-options = {
+      home-manager = hmOptionsDocs.optionsJSON;
+      nixos = nixosOptionsDocs.optionsJSON;
+      nix-darwin = nixDarwinOptionsDocs.optionsJSON;
     };
+    inherit revision;
   };
-
-  nixDarwinModuleDocs = buildModulesDocs {
-    modules = let
-      nixosModule = module: pkgs.path + "/nixos/modules" + module;
-      mockedNixDarwin = with lib; {
-        options = {
-          environment.pathsToLink = mkSinkUndeclaredOptions { };
-          system.activationScripts.postActivation.text =
-            mkSinkUndeclaredOptions { };
-          users.users = mkSinkUndeclaredOptions { };
-        };
-      };
-    in [
-      ../nix-darwin/default.nix
-      mockedNixDarwin
-      (nixosModule "/misc/assertions.nix")
-      scrubbedPkgsModule
-    ];
-    docBook = {
-      id = "nix-darwin-options";
-      optionIdPrefix = "nix-darwin-opt";
-    };
-  };
-
-  docs = nmd.buildDocBookDocs {
-    pathName = "home-manager";
-    modulesDocs = [ hmModulesDocs nixDarwinModuleDocs nixosModuleDocs ];
-    documentsDirectory = ./.;
-    documentType = "book";
-    chunkToc = ''
-      <toc>
-        <d:tocentry xmlns:d="http://docbook.org/ns/docbook" linkend="book-home-manager-manual"><?dbhtml filename="index.html"?>
-          <d:tocentry linkend="ch-options"><?dbhtml filename="options.html"?></d:tocentry>
-          <d:tocentry linkend="ch-nixos-options"><?dbhtml filename="nixos-options.html"?></d:tocentry>
-          <d:tocentry linkend="ch-nix-darwin-options"><?dbhtml filename="nix-darwin-options.html"?></d:tocentry>
-          <d:tocentry linkend="ch-tools"><?dbhtml filename="tools.html"?></d:tocentry>
-          <d:tocentry linkend="ch-release-notes"><?dbhtml filename="release-notes.html"?></d:tocentry>
-        </d:tocentry>
-      </toc>
+  html = home-manager-manual;
+  htmlOpenTool = pkgs.callPackage ./html-open-tool.nix { } { inherit html; };
+in {
+  options = {
+    # TODO: Use `hmOptionsDocs.optionsJSON` directly once upstream
+    # `nixosOptionsDoc` is more customizable.
+    json = pkgs.runCommand "options.json" {
+      meta.description = "List of Home Manager options in JSON format";
+    } ''
+      mkdir -p $out/{share/doc,nix-support}
+      cp -a ${hmOptionsDocs.optionsJSON}/share/doc/nixos $out/share/doc/home-manager
+      substitute \
+        ${hmOptionsDocs.optionsJSON}/nix-support/hydra-build-products \
+        $out/nix-support/hydra-build-products \
+        --replace-fail \
+          '${hmOptionsDocs.optionsJSON}/share/doc/nixos' \
+          "$out/share/doc/home-manager"
     '';
   };
 
-in {
-  inherit nmdSrc;
+  manPages = home-configuration-manual;
 
-  options = {
-    json = hmModulesDocs.json.override {
-      path = "share/doc/home-manager/options.json";
+  manual = { inherit html htmlOpenTool; };
+
+  # Unstable, mainly for CI.
+  jsonModuleMaintainers = pkgs.writeText "hm-module-maintainers.json" (let
+    result = lib.evalModules {
+      modules = import ../modules/modules.nix {
+        inherit lib pkgs;
+        check = false;
+      } ++ [ scrubbedPkgsModule ];
+      class = "homeManager";
     };
-  };
-
-  manPages = docs.manPages;
-
-  manual = { inherit (docs) html htmlOpenTool; };
+  in builtins.toJSON result.config.meta.maintainers);
 }

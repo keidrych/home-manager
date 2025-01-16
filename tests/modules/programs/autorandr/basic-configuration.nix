@@ -17,11 +17,16 @@
               primary = true;
               position = "0x0";
               mode = "1920x1080";
+              filter = "nearest";
               transform = [
                 [ 0.6 0.0 0.0 ] # a b c
                 [ 0.0 0.6 0.0 ] # d e f
                 [ 0.0 0.0 1.0 ] # g h i
               ];
+              extraConfig = ''
+                key1 value1
+                key2 value2
+              '';
             };
           };
         };
@@ -50,7 +55,11 @@
               crtc 0
               primary
               mode 1920x1080
-              transform 0.600000,0.000000,0.000000,0.000000,0.600000,0.000000,0.000000,0.000000,1.000000''
+              filter nearest
+              transform 0.600000,0.000000,0.000000,0.000000,0.600000,0.000000,0.000000,0.000000,1.000000
+              key1 value1
+              key2 value2
+            ''
           }
     '';
   };

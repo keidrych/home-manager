@@ -28,7 +28,7 @@ let
         type = types.attrsOf types.str;
         description = ''
           Output name to EDID mapping.
-          Use <code>autorandr --fingerprint</code> to get current setup values.
+          Use `autorandr --fingerprint` to get current setup values.
         '';
         default = { };
       };
@@ -115,10 +115,7 @@ let
         '';
         description = ''
           Refer to
-          <citerefentry>
-            <refentrytitle>xrandr</refentrytitle>
-            <manvolnum>1</manvolnum>
-          </citerefentry>
+          {manpage}`xrandr(1)`
           for the documentation of the transform matrix.
         '';
       };
@@ -153,18 +150,15 @@ let
         });
         description = ''
           Output scale configuration.
-          </para><para>
+
           Either configure by pixels or a scaling factor. When using pixel method the
-          <citerefentry>
-            <refentrytitle>xrandr</refentrytitle>
-            <manvolnum>1</manvolnum>
-          </citerefentry>
+          {manpage}`xrandr(1)`
           option
-          <parameter class="command">--scale-from</parameter>
+          `--scale-from`
           will be used; when using factor method the option
-          <parameter class="command">--scale</parameter>
+          `--scale`
           will be used.
-          </para><para>
+
           This option is a shortcut version of the transform option and they are mutually
           exclusive.
         '';
@@ -174,6 +168,25 @@ let
             x = 1.25;
             y = 1.25;
           }
+        '';
+      };
+
+      filter = mkOption {
+        type = types.nullOr (types.enum [ "bilinear" "nearest" ]);
+        description = "Interpolation method to be used for scaling the output.";
+        default = null;
+        example = "nearest";
+      };
+
+      extraConfig = mkOption {
+        type = types.lines;
+        description = "Extra lines to append to this profile's config.";
+        default = "";
+        example = literalExpression ''
+          '''
+            x-prop-non_desktop 0
+            some-key some-value
+          '''
         '';
       };
     };
@@ -261,11 +274,13 @@ let
         ++ optional (config.mode != "") "mode ${config.mode}"
         ++ optional (config.rate != "") "rate ${config.rate}"
         ++ optional (config.rotate != null) "rotate ${config.rotate}"
+        ++ optional (config.filter != null) "filter ${config.filter}"
         ++ optional (config.transform != null) ("transform "
           + concatMapStringsSep "," toString (flatten config.transform))
         ++ optional (config.scale != null)
         ((if config.scale.method == "factor" then "scale" else "scale-from")
-          + " ${toString config.scale.x}x${toString config.scale.y}"))
+          + " ${toString config.scale.x}x${toString config.scale.y}")
+        ++ optional (config.extraConfig != "") config.extraConfig)
     else ''
       output ${name}
       off
@@ -297,7 +312,7 @@ in {
                     DPI=144
                     ;;
                   *)
-                    echo "Unknown profle: $AUTORANDR_CURRENT_PROFILE"
+                    echo "Unknown profile: $AUTORANDR_CURRENT_PROFILE"
                     exit 1
                 esac
 

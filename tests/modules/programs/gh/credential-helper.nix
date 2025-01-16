@@ -3,15 +3,15 @@
 {
   programs.gh = {
     enable = true;
-    enableGitCredentialHelper = true;
+    gitCredentialHelper = {
+      enable = true;
+      hosts = [ "https://github.com" "https://github.example.com" ];
+    };
   };
 
   programs.git.enable = true;
 
-  test.stubs = {
-    gh = { };
-    git = { };
-  };
+  test.stubs.gh = { };
 
   nmt.script = ''
     assertFileExists home-files/.config/git/config

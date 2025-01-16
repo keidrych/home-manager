@@ -30,11 +30,13 @@ in {
       apply = toString;
       description = ''
         Absolute path to directory holding application caches.
+
+        Sets `XDG_CACHE_HOME` for the user if `xdg.enable` is set `true`.
       '';
     };
 
     configFile = mkOption {
-      type = fileType "<varname>xdg.configHome</varname>" cfg.configHome;
+      type = fileType "xdg.configFile" "{var}`xdg.configHome`" cfg.configHome;
       default = { };
       description = ''
         Attribute set of files to link into the user's XDG
@@ -48,11 +50,14 @@ in {
       apply = toString;
       description = ''
         Absolute path to directory holding application configurations.
+
+        Sets `XDG_CONFIG_HOME` for the user if `xdg.enable` is set `true`.
       '';
     };
 
     dataFile = mkOption {
-      type = fileType "<varname>xdg.dataHome</varname>" cfg.dataHome;
+      type =
+        fileType "xdg.dataFile" "<varname>xdg.dataHome</varname>" cfg.dataHome;
       default = { };
       description = ''
         Attribute set of files to link into the user's XDG
@@ -66,6 +71,18 @@ in {
       apply = toString;
       description = ''
         Absolute path to directory holding application data.
+
+        Sets `XDG_DATA_HOME` for the user if `xdg.enable` is set `true`.
+      '';
+    };
+
+    stateFile = mkOption {
+      type = fileType "xdg.stateFile" "<varname>xdg.stateHome</varname>"
+        cfg.stateHome;
+      default = { };
+      description = ''
+        Attribute set of files to link into the user's XDG
+        state home.
       '';
     };
 
@@ -75,23 +92,29 @@ in {
       apply = toString;
       description = ''
         Absolute path to directory holding application states.
+
+        Sets `XDG_STATE_HOME` for the user if `xdg.enable` is set `true`.
       '';
     };
   };
 
   config = mkMerge [
-    (mkIf cfg.enable {
-      xdg.cacheHome = mkDefault defaultCacheHome;
-      xdg.configHome = mkDefault defaultConfigHome;
-      xdg.dataHome = mkDefault defaultDataHome;
-      xdg.stateHome = mkDefault defaultStateHome;
-
-      home.sessionVariables = {
+    (let
+      variables = {
         XDG_CACHE_HOME = cfg.cacheHome;
         XDG_CONFIG_HOME = cfg.configHome;
         XDG_DATA_HOME = cfg.dataHome;
         XDG_STATE_HOME = cfg.stateHome;
       };
+    in mkIf cfg.enable {
+      xdg.cacheHome = mkDefault defaultCacheHome;
+      xdg.configHome = mkDefault defaultConfigHome;
+      xdg.dataHome = mkDefault defaultDataHome;
+      xdg.stateHome = mkDefault defaultStateHome;
+
+      home.sessionVariables = variables;
+      systemd.user.sessionVariables =
+        mkIf pkgs.stdenv.hostPlatform.isLinux variables;
     })
 
     # Legacy non-deterministic setup.
@@ -117,6 +140,8 @@ in {
           cfg.configFile)
         (mapAttrs' (name: file: nameValuePair "${cfg.dataHome}/${name}" file)
           cfg.dataFile)
+        (mapAttrs' (name: file: nameValuePair "${cfg.stateHome}/${name}" file)
+          cfg.stateFile)
         { "${cfg.cacheHome}/.keep".text = ""; }
       ];
     }

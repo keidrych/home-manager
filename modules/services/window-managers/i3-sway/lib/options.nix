@@ -1,11 +1,12 @@
-{ config, lib, moduleName, cfg, pkgs, capitalModuleName ? moduleName
-, isGaps ? true }:
+{ config, lib, moduleName, cfg, pkgs, capitalModuleName ? moduleName }:
 
 with lib;
 
 let
   isI3 = moduleName == "i3";
   isSway = !isI3;
+
+  inherit (config.home) stateVersion;
 
   fontOptions = types.submodule {
     options = {
@@ -30,7 +31,7 @@ let
       };
 
       size = mkOption {
-        type = types.float;
+        type = types.either types.float types.str;
         default = 8.0;
         description = ''
           The font size to use for window titles.
@@ -58,7 +59,7 @@ let
         default = true;
         description = ''
           Whether to enable startup-notification support for the command.
-          See <option>--no-startup-id</option> option description in the i3 user guide.
+          See {option}`--no-startup-id` option description in the i3 user guide.
         '';
       };
 
@@ -67,8 +68,8 @@ let
         default = null;
         description = ''
           Launch application on a particular workspace. DEPRECATED:
-          Use <varname><link linkend="opt-xsession.windowManager.i3.config.assigns">xsession.windowManager.i3.config.assigns</link></varname>
-          instead. See <link xlink:href="https://github.com/nix-community/home-manager/issues/265"/>.
+          Use [](#opt-xsession.windowManager.i3.config.assigns)
+          instead. See <https://github.com/nix-community/home-manager/issues/265>.
         '';
       };
     };
@@ -77,7 +78,7 @@ let
 
   barModule = types.submodule {
     options = let
-      versionAtLeast2009 = versionAtLeast config.home.stateVersion "20.09";
+      versionAtLeast2009 = versionAtLeast stateVersion "20.09";
       mkNullableOption = { type, default, ... }@args:
         mkOption (args // {
           type = types.nullOr type;
@@ -158,7 +159,7 @@ let
         defaultText = "i3bar";
         description = "Command that will be used to start a bar.";
         example = if isI3 then
-          "\${pkgs.i3-gaps}/bin/i3bar -t"
+          "\${pkgs.i3}/bin/i3bar -t"
         else
           "\${pkgs.waybar}/bin/waybar";
       };
@@ -283,14 +284,24 @@ let
           See default values for the reference.
           Note that 'background', 'status', and 'separator' parameters take a single RGB value.
 
-          See <link xlink:href="https://i3wm.org/docs/userguide.html#_colors"/>.
+          See <https://i3wm.org/docs/userguide.html#_colors>.
         '';
       };
 
       trayOutput = mkNullableOption {
         type = types.str;
-        default = "primary";
+        # Sway/Wayland doesn't have the concept of a primary output. The default for sway is to show it on all outputs
+        default = if isI3 then "primary" else "*";
         description = "Where to output tray.";
+      };
+
+      trayPadding = mkNullableOption {
+        type = types.int;
+        default = null;
+        description = ''
+          Sets the pixel padding of the system tray.
+          This padding will surround the tray on all sides and between each item.
+        '';
       };
     };
   };
@@ -355,8 +366,8 @@ let
         type = criteriaModule;
         description = ''
           Criteria of the windows on which command should be executed.
-          </para><para>
-          A value of <literal>true</literal> is equivalent to using an empty
+
+          A value of `true` is equivalent to using an empty
           criteria (which is different from an empty string criteria).
         '';
         example = literalExpression ''
@@ -389,11 +400,17 @@ in {
       options = {
         titlebar = mkOption {
           type = types.bool;
-          default = !isGaps;
-          defaultText = if isI3 then
-            "xsession.windowManager.i3.package != nixpkgs.i3-gaps (titlebar should be disabled for i3-gaps)"
+          default = if versionOlder stateVersion "23.05" then
+            (isI3 && (cfg.config.gaps == null))
           else
-            "false";
+            true;
+          defaultText = if isI3 then ''
+            true for state version ≥ 23.05
+            config.gaps == null for state version < 23.05
+          '' else ''
+            true for state version ≥ 23.05
+            false for state version < 23.05
+          '';
           description = "Whether to show window titlebars.";
         };
 
@@ -404,7 +421,13 @@ in {
         };
 
         hideEdgeBorders = mkOption {
-          type = types.enum [ "none" "vertical" "horizontal" "both" "smart" ];
+          type = let
+            i3Options = [ "none" "vertical" "horizontal" "both" "smart" ];
+            swayOptions = i3Options ++ [ "smart_no_gaps" ];
+          in if isI3 then
+            types.enum i3Options
+          else
+            types.enum (swayOptions ++ (map (e: "--i3 ${e}") swayOptions));
           default = "none";
           description = "Hide window borders adjacent to the screen edges.";
         };
@@ -414,7 +437,7 @@ in {
           default = [ ];
           description = ''
             List of commands that should be executed on specific windows.
-            See <option>for_window</option> ${moduleName}wm option documentation.
+            See {option}`for_window` ${moduleName}wm option documentation.
           '';
           example = [{
             command = "border pixel 1";
@@ -432,11 +455,17 @@ in {
       options = {
         titlebar = mkOption {
           type = types.bool;
-          default = !isGaps;
-          defaultText = if isI3 then
-            "xsession.windowManager.i3.package != nixpkgs.i3-gaps (titlebar should be disabled for i3-gaps)"
+          default = if versionOlder stateVersion "23.05" then
+            (isI3 && (cfg.config.gaps == null))
           else
-            "false";
+            true;
+          defaultText = if isI3 then ''
+            true for state version ≥ 23.05
+            config.gaps == null for state version < 23.05
+          '' else ''
+            true for state version ≥ 23.05
+            false for state version < 23.05
+          '';
           description = "Whether to show floating window titlebars.";
         };
 
@@ -447,12 +476,11 @@ in {
         };
 
         modifier = mkOption {
-          type =
-            types.enum [ "Shift" "Control" "Mod1" "Mod2" "Mod3" "Mod4" "Mod5" ];
+          type = types.str;
           default = cfg.config.modifier;
           defaultText = "${moduleName}.config.modifier";
           description =
-            "Modifier key that can be used to drag floating windows.";
+            "Modifier key or keys that can be used to drag floating windows.";
           example = "Mod4";
         };
 
@@ -481,7 +509,7 @@ in {
           description = ''
             This option modifies focus behavior on new window activation.
 
-            See <link xlink:href="https://i3wm.org/docs/userguide.html#focus_on_window_activation"/>
+            See <https://i3wm.org/docs/userguide.html#focus_on_window_activation>
           '';
           example = "none";
         };
@@ -494,24 +522,39 @@ in {
           default = if isSway then "yes" else true;
           description = "Whether focus should follow the mouse.";
           apply = val:
-            if (isSway && isBool val) then
-              (if val then "yes" else "no")
-            else
-              val;
+            if (isSway && isBool val) then (lib.hm.booleans.yesNo val) else val;
+        };
+
+        wrapping = mkOption {
+          type = types.enum [ "yes" "no" "force" "workspace" ];
+          default = {
+            i3 = if cfg.config.focus.forceWrapping then "force" else "yes";
+            # the sway module's logic was inverted and incorrect,
+            # so preserve it for backwards compatibility purposes
+            sway = if cfg.config.focus.forceWrapping then "yes" else "no";
+          }.${moduleName};
+          description = ''
+            Whether the window focus commands automatically wrap around the edge of containers.
+
+            See <https://i3wm.org/docs/userguide.html#_focus_wrapping>
+          '';
         };
 
         forceWrapping = mkOption {
           type = types.bool;
           default = false;
           description = ''
-            Whether to force focus wrapping in tabbed or stacked container.
+            Whether to force focus wrapping in tabbed or stacked containers.
 
-            See <link xlink:href="https://i3wm.org/docs/userguide.html#_focus_wrapping"/>
+            This option is deprecated, use {option}`focus.wrapping` instead.
           '';
         };
 
         mouseWarping = mkOption {
-          type = types.bool;
+          type = if isSway then
+            types.oneOf [ types.bool (types.enum [ "container" "output" ]) ]
+          else
+            types.bool;
           default = true;
           description = ''
             Whether mouse cursor should be warped to the center of the window when switching focus
@@ -573,7 +616,7 @@ in {
     default = { };
     description = ''
       An attribute set that assigns keypress to an action using key code.
-      See <link xlink:href="https://i3wm.org/docs/userguide.html#keybindings"/>.
+      See <https://i3wm.org/docs/userguide.html#keybindings>.
     '';
     example = { "214" = "exec /bin/script.sh"; };
   };
@@ -664,13 +707,13 @@ in {
       and RGB color hex-codes as values. See default values for the reference.
       Note that '${moduleName}.config.colors.background' parameter takes a single RGB value.
 
-      See <link xlink:href="https://i3wm.org/docs/userguide.html#_changing_colors"/>.
+      See <https://i3wm.org/docs/userguide.html#_changing_colors>.
     '';
   };
 
   bars = mkOption {
     type = types.listOf barModule;
-    default = if versionAtLeast config.home.stateVersion "20.09" then [{
+    default = if versionAtLeast stateVersion "20.09" then [{
       mode = "dock";
       hiddenState = "hide";
       position = "bottom";
@@ -726,14 +769,14 @@ in {
     description = ''
       Commands that should be executed at startup.
 
-      See <link xlink:href="https://i3wm.org/docs/userguide.html#_automatically_starting_applications_on_i3_startup"/>.
+      See <https://i3wm.org/docs/userguide.html#_automatically_starting_applications_on_i3_startup>.
     '';
     example = if isI3 then
       literalExpression ''
         [
         { command = "systemctl --user restart polybar"; always = true; notification = false; }
         { command = "dropbox start"; notification = false; }
-        { command = "firefox"; workspace = "1: web"; }
+        { command = "firefox"; }
         ];
       ''
     else
@@ -826,19 +869,14 @@ in {
       };
     });
     default = null;
-    description = if isSway then ''
+    description = ''
       Gaps related settings.
-    '' else ''
-      i3Gaps related settings. The i3-gaps package must be used for these features to work.
     '';
   };
 
   terminal = mkOption {
     type = types.str;
-    default = if isI3 then
-      "i3-sensible-terminal"
-    else
-      "${pkgs.rxvt-unicode-unwrapped}/bin/urxvt";
+    default = if isI3 then "i3-sensible-terminal" else "${pkgs.foot}/bin/foot";
     description = "Default terminal to run.";
     example = "alacritty";
   };
@@ -880,13 +918,14 @@ in {
             };
 
             output = mkOption {
-              type = str;
+              type = with types; either str (listOf str);
               default = "";
+              apply = lists.toList;
               example = "eDP";
               description = ''
-                Name of the output from <command>
+                Name(s) of the output(s) from {command}`
                   ${if isSway then "swaymsg" else "i3-msg"} -t get_outputs
-                </command>.
+                `.
               '';
             };
           };

@@ -6,6 +6,7 @@ with lib;
   config = {
     programs.bash = {
       enable = true;
+      enableCompletion = false;
 
       logoutExtra = ''
         clear-console
@@ -17,7 +18,7 @@ with lib;
       assertFileContent \
         home-files/.bash_logout \
         ${
-          pkgs.writeShellScript "logout-expected" ''
+          builtins.toFile "logout-expected" ''
             clear-console
           ''
         }

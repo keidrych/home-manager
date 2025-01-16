@@ -40,7 +40,12 @@ let
         end = "";
       } name value) + "\n";
 
-  toRasi = attrs: concatStringsSep "\n" (mapAttrsToList mkRasiSection attrs);
+  toRasi = attrs:
+    concatStringsSep "\n" (concatMap (mapAttrsToList mkRasiSection) [
+      (filterAttrs (n: _: n == "@theme") attrs)
+      (filterAttrs (n: _: n == "@import") attrs)
+      (removeAttrs attrs [ "@theme" "@import" ])
+    ]);
 
   locationsMap = {
     center = 0;
@@ -103,10 +108,18 @@ in {
       default = pkgs.rofi;
       type = types.package;
       description = ''
-        Package providing the <command>rofi</command> binary.
+        Package providing the {command}`rofi` binary.
       '';
       example = literalExpression ''
         pkgs.rofi.override { plugins = [ pkgs.rofi-emoji ]; };
+      '';
+    };
+
+    finalPackage = mkOption {
+      type = types.package;
+      readOnly = true;
+      description = ''
+        Resulting customized rofi package.
       '';
     };
 
@@ -198,7 +211,7 @@ in {
       description = ''
         Name of theme or path to theme file in rasi format or attribute set with
         theme configuration. Available named themes can be viewed using the
-        <command>rofi-theme-selector</command> tool.
+        {command}`rofi-theme-selector` tool.
       '';
     };
 
@@ -249,14 +262,15 @@ in {
       inherit value;
     };
 
-    home.packages = let
+    programs.rofi.finalPackage = let
       rofiWithPlugins = cfg.package.override
-        (old: rec { plugins = (old.plugins or [ ]) ++ cfg.plugins; });
-      rofiPackage = if builtins.hasAttr "override" cfg.package then
-        rofiWithPlugins
-      else
-        cfg.package;
-    in [ rofiPackage ];
+        (old: { plugins = (old.plugins or [ ]) ++ cfg.plugins; });
+    in if builtins.hasAttr "override" cfg.package && cfg.plugins != [ ] then
+      rofiWithPlugins
+    else
+      cfg.package;
+
+    home.packages = [ cfg.finalPackage ];
 
     home.file."${cfg.configPath}".text = toRasi {
       configuration = ({

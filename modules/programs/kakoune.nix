@@ -10,13 +10,9 @@ let
     options = {
       name = mkOption {
         type = types.enum [
-          "NormalBegin"
           "NormalIdle"
-          "NormalEnd"
           "NormalKey"
-          "InsertBegin"
           "InsertIdle"
-          "InsertEnd"
           "InsertKey"
           "InsertChar"
           "InsertDelete"
@@ -48,13 +44,16 @@ let
           "RawKey"
           "InsertCompletionShow"
           "InsertCompletionHide"
-          "InsertCompletionSelect"
           "ModuleLoaded"
+          "ClientCreate"
+          "ClientClose"
+          "RegisterModified"
+          "User"
         ];
         example = "SetOption";
         description = ''
           The name of the hook. For a description, see
-          <link xlink:href="https://github.com/mawww/kakoune/blob/master/doc/pages/hooks.asciidoc#default-hooks"/>.
+          <https://github.com/mawww/kakoune/blob/master/doc/pages/hooks.asciidoc#default-hooks>.
         '';
       };
 
@@ -117,7 +116,7 @@ let
         example = "<a-x>";
         description = ''
           The key to be mapped. See
-          <link xlink:href="https://github.com/mawww/kakoune/blob/master/doc/pages/mapping.asciidoc#mappable-keys"/>
+          <https://github.com/mawww/kakoune/blob/master/doc/pages/mapping.asciidoc#mappable-keys>
           for possible values.
         '';
       };
@@ -139,7 +138,7 @@ let
         default = null;
         description = ''
           Set the color scheme. To see available schemes, enter
-          <command>colorscheme</command> at the kakoune prompt.
+          {command}`colorscheme` at the kakoune prompt.
         '';
       };
 
@@ -148,7 +147,7 @@ let
         default = null;
         description = ''
           The width of a tab in spaces. The kakoune default is
-          <literal>6</literal>.
+          `6`.
         '';
       };
 
@@ -157,8 +156,8 @@ let
         default = null;
         description = ''
           The width of an indentation in spaces.
-          The kakoune default is <literal>4</literal>.
-          If <literal>0</literal>, a tab will be used instead.
+          The kakoune default is `4`.
+          If `0`, a tab will be used instead.
         '';
       };
 
@@ -185,7 +184,7 @@ let
         example = [ "command" "normal" ];
         description = ''
           Contexts in which to display automatic information box.
-          The kakoune default is <literal>[ "command" "onkey" ]</literal>.
+          The kakoune default is `[ "command" "onkey" ]`.
         '';
       };
 
@@ -194,7 +193,7 @@ let
         default = null;
         description = ''
           Modes in which to display possible completions.
-          The kakoune default is <literal>[ "insert" "prompt" ]</literal>.
+          The kakoune default is `[ "insert" "prompt" ]`.
         '';
       };
 
@@ -203,7 +202,7 @@ let
         default = null;
         description = ''
           Reload buffers when an external modification is detected.
-          The kakoune default is <literal>"ask"</literal>.
+          The kakoune default is `"ask"`.
         '';
       };
 
@@ -298,7 +297,7 @@ let
               description = ''
                 Amount by which shifted function keys are offset. That
                 is, if the terminal sends F13 for Shift-F1, this
-                should be <literal>12</literal>.
+                should be `12`.
               '';
             };
 
@@ -322,7 +321,7 @@ let
         default = false;
         description = ''
           Highlight the matching char of the character under the
-          selections' cursor using the <literal>MatchingChar</literal>
+          selections' cursor using the `MatchingChar`
           face.
         '';
       };
@@ -362,7 +361,7 @@ let
               example = "⏎";
               description = ''
                 Prefix wrapped lines with marker text.
-                If not <literal>null</literal>,
+                If not `null`,
                 the marker text will be displayed in the indentation if possible.
               '';
             };
@@ -401,7 +400,7 @@ let
               description = ''
                 String that separates the line number column from the
                 buffer contents. The kakoune default is
-                <literal>"|"</literal>.
+                `"|"`.
               '';
             };
           };
@@ -422,7 +421,7 @@ let
               default = null;
               description = ''
                 The character to display for line feeds.
-                The kakoune default is <literal>"¬"</literal>.
+                The kakoune default is `"¬"`.
               '';
             };
 
@@ -431,7 +430,7 @@ let
               default = null;
               description = ''
                 The character to display for spaces.
-                The kakoune default is <literal>"·"</literal>.
+                The kakoune default is `"·"`.
               '';
             };
 
@@ -440,7 +439,7 @@ let
               default = null;
               description = ''
                 The character to display for non-breaking spaces.
-                The kakoune default is <literal>"⍽"</literal>.
+                The kakoune default is `"⍽"`.
               '';
             };
 
@@ -449,7 +448,7 @@ let
               default = null;
               description = ''
                 The character to display for tabs.
-                The kakoune default is <literal>"→"</literal>.
+                The kakoune default is `"→"`.
               '';
             };
 
@@ -458,7 +457,7 @@ let
               default = null;
               description = ''
                 The character to append to tabs to reach the width of a tabstop.
-                The kakoune default is <literal>" "</literal>.
+                The kakoune default is `" "`.
               '';
             };
           };
@@ -474,7 +473,7 @@ let
         default = [ ];
         description = ''
           User-defined key mappings. For documentation, see
-          <link xlink:href="https://github.com/mawww/kakoune/blob/master/doc/pages/mapping.asciidoc"/>.
+          <https://github.com/mawww/kakoune/blob/master/doc/pages/mapping.asciidoc>.
         '';
       };
 
@@ -483,15 +482,14 @@ let
         default = [ ];
         description = ''
           Global hooks. For documentation, see
-          <link xlink:href="https://github.com/mawww/kakoune/blob/master/doc/pages/hooks.asciidoc"/>.
+          <https://github.com/mawww/kakoune/blob/master/doc/pages/hooks.asciidoc>.
         '';
       };
     };
   };
 
-  kakouneWithPlugins = pkgs.wrapKakoune pkgs.kakoune-unwrapped {
-    configure = { plugins = cfg.plugins; };
-  };
+  kakouneWithPlugins =
+    pkgs.wrapKakoune cfg.package { configure = { plugins = cfg.plugins; }; };
 
   configFile = let
     wrapOptions = with cfg.config.wrapLines;
@@ -530,20 +528,20 @@ let
 
     uiOptions = with cfg.config.ui;
       concatStringsSep " " [
-        "ncurses_set_title=${if setTitle then "true" else "false"}"
-        "ncurses_status_on_top=${
+        "terminal_set_title=${if setTitle then "true" else "false"}"
+        "terminal_status_on_top=${
           if (statusLine == "top") then "true" else "false"
         }"
-        "ncurses_assistant=${assistant}"
-        "ncurses_enable_mouse=${if enableMouse then "true" else "false"}"
-        "ncurses_change_colors=${if changeColors then "true" else "false"}"
+        "terminal_assistant=${assistant}"
+        "terminal_enable_mouse=${if enableMouse then "true" else "false"}"
+        "terminal_change_colors=${if changeColors then "true" else "false"}"
         "${optionalString (wheelDownButton != null)
-        "ncurses_wheel_down_button=${wheelDownButton}"}"
+        "terminal_wheel_down_button=${wheelDownButton}"}"
         "${optionalString (wheelUpButton != null)
-        "ncurses_wheel_up_button=${wheelUpButton}"}"
+        "terminal_wheel_up_button=${wheelUpButton}"}"
         "${optionalString (shiftFunctionKeys != null)
-        "ncurses_shift_function_key=${toString shiftFunctionKeys}"}"
-        "ncurses_builtin_key_parser=${
+        "terminal_shift_function_key=${toString shiftFunctionKeys}"}"
+        "terminal_builtin_key_parser=${
           if useBuiltinKeyParser then "true" else "false"
         }"
       ];
@@ -624,10 +622,21 @@ in {
     programs.kakoune = {
       enable = mkEnableOption "the kakoune text editor";
 
+      package = mkPackageOption pkgs "kakoune-unwrapped" { };
+
       config = mkOption {
         type = types.nullOr configModule;
         default = { };
         description = "kakoune configuration options.";
+      };
+
+      defaultEditor = mkOption {
+        type = types.bool;
+        default = false;
+        description = ''
+          Whether to configure {command}`kak` as the default
+          editor using the {env}`EDITOR` environment variable.
+        '';
       };
 
       extraConfig = mkOption {
@@ -635,7 +644,7 @@ in {
         default = "";
         description = ''
           Extra configuration lines to add to
-          <filename>$XDG_CONFIG_HOME/kak/kakrc</filename>.
+          {file}`$XDG_CONFIG_HOME/kak/kakrc`.
         '';
       };
 
@@ -646,7 +655,19 @@ in {
         description = ''
           List of kakoune plugins to install. To get a list of
           supported plugins run:
-          <command>nix-env -f '&lt;nixpkgs&gt;' -qaP -A kakounePlugins</command>.
+          {command}`nix-env -f '<nixpkgs>' -qaP -A kakounePlugins`.
+        '';
+      };
+
+      colorSchemePackage = mkOption {
+        type = with types; nullOr package;
+        default = null;
+        example = literalExpression "pkgs.kakounePlugins.kakoune-catppuccin";
+        description = ''
+          A kakoune color schemes to add to your colors folder. This works
+          because kakoune recursively checks
+          {file}`$XDG_CONFIG_HOME/kak/colors/`. To apply the color scheme use
+          `programs.kakoune.config.colorScheme = "theme"`.
         '';
       };
     };
@@ -654,6 +675,13 @@ in {
 
   config = mkIf cfg.enable {
     home.packages = [ kakouneWithPlugins ];
-    xdg.configFile."kak/kakrc".source = configFile;
+    home.sessionVariables = mkIf cfg.defaultEditor { EDITOR = "kak"; };
+    xdg.configFile = mkMerge [
+      { "kak/kakrc".source = configFile; }
+      (mkIf (cfg.colorSchemePackage != null) {
+        "kak/colors/${cfg.colorSchemePackage.name}".source =
+          cfg.colorSchemePackage;
+      })
+    ];
   };
 }

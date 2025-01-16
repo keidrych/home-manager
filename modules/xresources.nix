@@ -32,7 +32,7 @@ in {
     xresources.properties = mkOption {
       type = with types;
         let
-          prim = either bool (either int str);
+          prim = oneOf [ bool int float str ];
           entry = either prim (listOf prim);
         in nullOr (attrsOf entry);
       default = null;
@@ -50,8 +50,8 @@ in {
         All other values are directly formatted using builtins.toString.
         Note, that 2-dimensional lists are not supported and specifying one will throw an exception.
         If this and all other xresources options are
-        <code>null</code>, then this feature is disabled and no
-        <filename>~/.Xresources</filename> link is produced.
+        `null`, then this feature is disabled and no
+        {file}`~/.Xresources` link is produced.
       '';
     };
 
@@ -71,8 +71,8 @@ in {
       description = ''
         Additional X server resources contents.
         If this and all other xresources options are
-        <code>null</code>, then this feature is disabled and no
-        <filename>~/.Xresources</filename> link is produced.
+        `null`, then this feature is disabled and no
+        {file}`~/.Xresources` link is produced.
       '';
     };
 
@@ -81,7 +81,7 @@ in {
       default = "${config.home.homeDirectory}/.Xresources";
       defaultText = "$HOME/.Xresources";
       description =
-        "Path where Home Manager should link the <filename>.Xresources</filename> file.";
+        "Path where Home Manager should link the {file}`.Xresources` file.";
     };
   };
 
@@ -99,6 +99,6 @@ in {
         '';
       };
 
-      xsession.initExtra = xrdbMerge;
+      xsession.profileExtra = xrdbMerge;
     };
 }

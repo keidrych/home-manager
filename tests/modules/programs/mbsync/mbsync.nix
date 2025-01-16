@@ -11,7 +11,7 @@ with lib;
       # programs.mbsync.groups and
       # accounts.email.accounts.<name>.mbsync.groups should NOT be used at the
       # same time.
-      # If they are, then the new version will take precendence.
+      # If they are, then the new version will take precedence.
       groups.inboxes = {
         "hm@example.com" = [ "Inbox1" "Inbox2" ];
         hm-account = [ "Inbox" ];
@@ -21,6 +21,7 @@ with lib;
     accounts.email.accounts = {
       "hm@example.com".mbsync = {
         enable = true;
+        extraConfig.account.TLSVersions = [ "+1.3" "+1.2" "-1.1" ];
         groups.inboxes = {
           channels = {
             inbox1 = {
@@ -78,8 +79,8 @@ with lib;
     test.stubs.isync = { };
 
     nmt.script = ''
-      assertFileExists home-files/.mbsyncrc
-      assertFileContent home-files/.mbsyncrc ${./mbsync-expected.conf}
+      assertFileExists home-files/.config/isyncrc
+      assertFileContent home-files/.config/isyncrc ${./mbsync-expected.conf}
     '';
   };
 }

@@ -1,7 +1,5 @@
 # Test that keybindings.json is created correctly.
-{ config, lib, pkgs, ... }:
-
-with lib;
+{ pkgs, ... }:
 
 let
   bindings = [
@@ -27,12 +25,17 @@ let
     }
   ];
 
-  targetPath = if pkgs.stdenv.hostPlatform.isDarwin then
+  keybindingsPath = if pkgs.stdenv.hostPlatform.isDarwin then
     "Library/Application Support/Code/User/keybindings.json"
   else
     ".config/Code/User/keybindings.json";
 
-  expectedJson = pkgs.writeText "expected.json" ''
+  settingsPath = if pkgs.stdenv.hostPlatform.isDarwin then
+    "Library/Application Support/Code/User/settings.json"
+  else
+    ".config/Code/User/settings.json";
+
+  expectedKeybindings = pkgs.writeText "expected.json" ''
     [
       {
         "command": "editor.action.clipboardCopyAction",
@@ -58,17 +61,18 @@ let
       }
     ]
   '';
-in {
-  config = {
-    programs.vscode = {
-      enable = true;
-      keybindings = bindings;
-      package = pkgs.writeScriptBin "vscode" "" // { pname = "vscode"; };
-    };
 
-    nmt.script = ''
-      assertFileExists "home-files/${targetPath}"
-      assertFileContent "home-files/${targetPath}" "${expectedJson}"
-    '';
+in {
+  programs.vscode = {
+    enable = true;
+    keybindings = bindings;
+    package = pkgs.writeScriptBin "vscode" "" // { pname = "vscode"; };
   };
+
+  nmt.script = ''
+    assertFileExists "home-files/${keybindingsPath}"
+    assertFileContent "home-files/${keybindingsPath}" "${expectedKeybindings}"
+
+    assertPathNotExists "home-files/${settingsPath}"
+  '';
 }

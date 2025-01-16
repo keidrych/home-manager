@@ -1,6 +1,4 @@
-{ config, lib, pkgs, ... }:
-
-with lib;
+{ config, lib, ... }:
 
 {
   config = {
@@ -14,10 +12,10 @@ with lib;
           columns = 200;
         };
 
-        key_bindings = [{
+        keyboard.bindings = [{
           key = "K";
           mods = "Control";
-          chars = "\\x0c";
+          chars = "\\u000c";
         }];
 
         font = let
@@ -30,10 +28,12 @@ with lib;
       };
     };
 
+    test.stubs = { alacritty = { }; };
+
     nmt.script = ''
       assertFileContent \
-        home-files/.config/alacritty/alacritty.yml \
-        ${./settings-merging-expected.yml}
+        home-files/.config/alacritty/alacritty.toml \
+        ${./settings-toml-expected.toml}
     '';
   };
 }

@@ -3,11 +3,14 @@
 {
   programs = {
     atuin.enable = true;
-    bash.enable = true;
+    bash = {
+      enable = true;
+      enableCompletion = false;
+    };
   };
 
   test.stubs = {
-    atuin = { };
+    atuin = { name = "atuin"; };
     bash-preexec = { };
   };
 
@@ -15,6 +18,6 @@
     assertFileExists home-files/.bashrc
     assertFileContains \
       home-files/.bashrc \
-      'eval "$(@atuin@/bin/atuin init bash)"'
+      'eval "$(@atuin@/bin/atuin init bash )"'
   '';
 }

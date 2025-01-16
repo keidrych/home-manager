@@ -12,28 +12,10 @@ let
   toIni = generators.toINI {
     mkKeyValue = key: value:
       let
-        value' = if isBool value then
-          (if value then "yes" else "no")
-        else
-          toString value;
+        value' =
+          (if isBool value then lib.hm.booleans.yesNo else toString) value;
       in "${key} = ${value'}";
   };
-
-  # Generates a script to fetch only a specific account.
-  #
-  # Note, these scripts are not actually created and installed at the
-  # moment. It will need some thinking on whether this is a good idea
-  # and whether other modules should have some similar functionality.
-  #
-  # Perhaps have a single tool `email` that wraps the command?
-  # Something like
-  #
-  #     $ email <account name> <program name> <program args>
-  genOfflineImapScript = account:
-    with account;
-    pkgs.writeShellScriptBin "offlineimap-${name}" ''
-      exec ${pkgs.offlineimap}/bin/offlineimap -a${account.name} "$@"
-    '';
 
   accountStr = account:
     with account;
@@ -60,6 +42,7 @@ let
         starttls = imap.tls.useStartTls;
       } else {
         ssl = false;
+        starttls = false;
       };
 
       remotePassEval =
@@ -92,6 +75,16 @@ in {
     programs.offlineimap = {
       enable = mkEnableOption "OfflineIMAP";
 
+      package = mkPackageOption pkgs "offlineimap" {
+        example = ''
+          pkgs.offlineimap.overridePythonAttrs ( old: {
+            propagatedBuildInputs = old.propagatedBuildInputs
+              ++ (with pkgs.python3Packages; [
+                requests_oauthlib xdg gpgme]);
+          })'';
+        extraDescription = "Can be used to specify extensions.";
+      };
+
       pythonFile = mkOption {
         type = types.lines;
         default = ''
@@ -115,7 +108,7 @@ in {
         };
         description = ''
           Extra configuration options added to the
-          <option>general</option> section.
+          {option}`general` section.
         '';
       };
 
@@ -125,7 +118,7 @@ in {
         example = { gmailtrashfolder = "[Gmail]/Papierkorb"; };
         description = ''
           Extra configuration options added to the
-          <option>DEFAULT</option> section.
+          {option}`DEFAULT` section.
         '';
       };
 
@@ -143,7 +136,7 @@ in {
         '';
         description = ''
           Extra configuration options added to the
-          <code>mbnames</code> section.
+          `mbnames` section.
         '';
       };
     };
@@ -155,18 +148,18 @@ in {
   };
 
   config = mkIf cfg.enable {
-    home.packages = [ pkgs.offlineimap ];
+    home.packages = [ cfg.package ];
 
     xdg.configFile."offlineimap/get_settings.py".text = cfg.pythonFile;
     xdg.configFile."offlineimap/get_settings.pyc".source = "${
         pkgs.runCommandLocal "get_settings-compile" {
-          nativeBuildInputs = [ pkgs.python2 ];
+          nativeBuildInputs = [ cfg.package ];
           pythonFile = cfg.pythonFile;
           passAsFile = [ "pythonFile" ];
         } ''
           mkdir -p $out/bin
           cp $pythonFilePath $out/bin/get_settings.py
-          python2 -m py_compile $out/bin/get_settings.py
+          python -m py_compile $out/bin/get_settings.py
         ''
       }/bin/get_settings.pyc";
 

@@ -6,6 +6,8 @@ let
 
   cfg = config.programs.go;
 
+  modeFileContent = "${cfg.telemetry.mode} ${cfg.telemetry.date}";
+
 in {
   meta.maintainers = [ maintainers.rvolosatovs ];
 
@@ -37,8 +39,8 @@ in {
         default = null;
         example = "go";
         description = ''
-          Primary <envar>GOPATH</envar> relative to
-          <envar>HOME</envar>. It will be exported first and therefore
+          Primary {env}`GOPATH` relative to
+          {env}`HOME`. It will be exported first and therefore
           used by default by the Go tooling.
         '';
       };
@@ -47,12 +49,9 @@ in {
         type = types.listOf types.str;
         default = [ ];
         example = [ "extraGoPath1" "extraGoPath2" ];
-        description = let goPathOpt = "programs.go.goPath";
-        in ''
-          Extra <envar>GOPATH</envar>s relative to <envar>HOME</envar> appended
-          after
-          <varname><link linkend="opt-${goPathOpt}">${goPathOpt}</link></varname>,
-          if that option is set.
+        description = ''
+          Extra {env}`GOPATH`s relative to {env}`HOME` appended
+          after [](#opt-programs.go.goPath), if that option is set.
         '';
       };
 
@@ -68,11 +67,36 @@ in {
         default = [ ];
         example = [ "*.corp.example.com" "rsc.io/private" ];
         description = ''
-          The <envar>GOPRIVATE</envar> environment variable controls
+          The {env}`GOPRIVATE` environment variable controls
           which modules the go command considers to be private (not
           available publicly) and should therefore not use the proxy
           or checksum database.
         '';
+      };
+
+      telemetry = mkOption {
+        type = types.submodule {
+          options = {
+            mode = mkOption {
+              type = with types; nullOr (enum [ "off" "local" "on" ]);
+              default = null;
+              description = "Go telemetry mode to be set.";
+            };
+
+            date = mkOption {
+              type = types.str;
+              default = "1970-01-01";
+              description = ''
+                The date indicating the date at which the modefile
+                was updated, in YYYY-MM-DD format. It's used to
+                reset the timeout before the next telemetry report
+                is uploaded when telemetry mode is set to "on".
+              '';
+            };
+          };
+        };
+        default = { };
+        description = "Options to configure Go telemetry mode.";
       };
     };
   };
@@ -100,6 +124,18 @@ in {
 
     (mkIf (cfg.goPrivate != [ ]) {
       home.sessionVariables.GOPRIVATE = concatStringsSep "," cfg.goPrivate;
+    })
+
+    (mkIf (cfg.telemetry.mode != null) {
+      home.file."Library/Application Support/go/telemetry/mode" = {
+        enable = pkgs.stdenv.hostPlatform.isDarwin;
+        text = modeFileContent;
+      };
+
+      xdg.configFile."go/telemetry/mode" = {
+        enable = !pkgs.stdenv.hostPlatform.isDarwin;
+        text = modeFileContent;
+      };
     })
   ]);
 }

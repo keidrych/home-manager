@@ -6,6 +6,7 @@ with lib;
   config = {
     programs.bash = {
       enable = true;
+      enableCompletion = false;
 
       sessionVariables = {
         V1 = "v1";
@@ -18,7 +19,7 @@ with lib;
       assertFileContent \
         home-files/.profile \
         ${
-          pkgs.writeShellScript "session-variables-expected" ''
+          builtins.toFile "session-variables-expected" ''
             . "/home/hm-user/.nix-profile/etc/profile.d/hm-session-vars.sh"
 
             export V1="v1"

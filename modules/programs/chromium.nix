@@ -4,6 +4,15 @@ with lib;
 
 let
 
+  supportedBrowsers = [
+    "chromium"
+    "google-chrome"
+    "google-chrome-beta"
+    "google-chrome-dev"
+    "brave"
+    "vivaldi"
+  ];
+
   browserModule = defaultPkg: name: visible:
     let
       browser = (builtins.parseDrvName defaultPkg.name).name;
@@ -11,10 +20,10 @@ let
     in {
       enable = mkOption {
         inherit visible;
+        type = types.bool;
         default = false;
         example = true;
         description = "Whether to enable ${name}.";
-        type = lib.types.bool;
       };
 
       package = mkOption {
@@ -23,6 +32,22 @@ let
         default = defaultPkg;
         defaultText = literalExpression "pkgs.${browser}";
         description = "The ${name} package to use.";
+      };
+
+      commandLineArgs = mkOption {
+        inherit visible;
+        type = types.listOf types.str;
+        default = [ ];
+        example = [ "--enable-logging=stderr" "--ignore-gpu-blocklist" ];
+        description = ''
+          List of command-line arguments to be passed to ${name}.
+
+          For a list of common switches, see
+          [Chrome switches](https://chromium.googlesource.com/chromium/src/+/refs/heads/main/chrome/common/chrome_switches.cc).
+
+          To search switches for other components, see
+          [Chromium codesearch](https://source.chromium.org/search?q=file:switches.cc&ss=chromium%2Fchromium%2Fsrc).
+        '';
       };
     } // optionalAttrs (!isProprietaryChrome) {
       # Extensions do not work with Google Chrome
@@ -36,7 +61,7 @@ let
                 id = mkOption {
                   type = strMatching "[a-zA-Z]{32}";
                   description = ''
-                    The extension's ID from the Chome Web Store url or the unpacked crx.
+                    The extension's ID from the Chrome Web Store url or the unpacked crx.
                   '';
                   default = "";
                 };
@@ -89,13 +114,27 @@ let
         description = ''
           List of ${name} extensions to install.
           To find the extension ID, check its URL on the
-          <link xlink:href="https://chrome.google.com/webstore/category/extensions">Chrome Web Store</link>.
-          </para><para>
+          [Chrome Web Store](https://chrome.google.com/webstore/category/extensions).
+
           To install extensions outside of the Chrome Web Store set
-          <literal>updateUrl</literal> or <literal>crxPath</literal> and
-          <literal>version</literal> as explained in the
-          <link xlink:href="https://developer.chrome.com/docs/extensions/mv2/external_extensions">Chrome
-          documentation</link>.
+          `updateUrl` or `crxPath` and
+          `version` as explained in the
+          [Chrome
+          documentation](https://developer.chrome.com/docs/extensions/mv2/external_extensions).
+        '';
+      };
+
+      dictionaries = mkOption {
+        inherit visible;
+        type = types.listOf types.package;
+        default = [ ];
+        example = literalExpression ''
+          [
+            pkgs.hunspellDictsChromium.en_US
+          ]
+        '';
+        description = ''
+          List of ${name} dictionaries to install.
         '';
       };
     };
@@ -105,6 +144,7 @@ let
 
       drvName = (builtins.parseDrvName cfg.package.name).name;
       browser = if drvName == "ungoogled-chromium" then "chromium" else drvName;
+      isProprietaryChrome = hasPrefix "google-chrome" drvName;
 
       darwinDirs = {
         chromium = "Chromium";
@@ -133,9 +173,23 @@ let
           });
         };
 
+      dictionary = pkg: {
+        name = "${configDir}/Dictionaries/${pkg.passthru.dictFileName}";
+        value.source = pkg;
+      };
+
+      package = if cfg.commandLineArgs != [ ] then
+        cfg.package.override {
+          commandLineArgs = concatStringsSep " " cfg.commandLineArgs;
+        }
+      else
+        cfg.package;
+
     in mkIf cfg.enable {
-      home.packages = [ cfg.package ];
-      home.file = listToAttrs (map extensionJson (cfg.extensions or [ ]));
+      home.packages = [ package ];
+      home.file = optionalAttrs (!isProprietaryChrome) (listToAttrs
+        ((map extensionJson cfg.extensions)
+          ++ (map dictionary cfg.dictionaries)));
     };
 
 in {
@@ -156,13 +210,9 @@ in {
     google-chrome-dev =
       browserModule pkgs.google-chrome-dev "Google Chrome Dev" false;
     brave = browserModule pkgs.brave "Brave Browser" false;
+    vivaldi = browserModule pkgs.vivaldi "Vivaldi Browser" false;
   };
 
-  config = mkMerge [
-    (browserConfig config.programs.chromium)
-    (browserConfig config.programs.google-chrome)
-    (browserConfig config.programs.google-chrome-beta)
-    (browserConfig config.programs.google-chrome-dev)
-    (browserConfig config.programs.brave)
-  ];
+  config = mkMerge
+    (map (browser: browserConfig config.programs.${browser}) supportedBrowsers);
 }

@@ -1,4 +1,4 @@
-{ config, lib, pkgs, ... }:
+{ config, pkgs, ... }:
 
 let
   i3 = {
@@ -6,14 +6,14 @@ let
     ws2 = "ABC";
     ws3 = "3: Test";
     ws4 = ''!"§$%&/(){}[]=?\*#<>-_.:,;²³'';
+    ws5 = "Multiple";
   };
 
 in {
-  imports = [ ./sway-stubs.nix ];
-
   wayland.windowManager.sway = {
     enable = true;
     package = config.lib.test.mkStubPackage { outPath = "@sway@"; };
+    checkConfig = false;
     # overriding findutils causes issues
     config.menu = "${pkgs.dmenu}/bin/dmenu_run";
 
@@ -34,12 +34,16 @@ in {
         workspace = "${i3.ws4}";
         output = "DVI";
       }
+      {
+        workspace = "${i3.ws5}";
+        output = [ "DVI" "HDMI" "DP" ];
+      }
     ];
   };
 
   nmt.script = ''
     assertFileExists home-files/.config/sway/config
-    assertFileContent home-files/.config/sway/config \
+    assertFileContent $(normalizeStorePaths home-files/.config/sway/config) \
       ${./sway-workspace-output-expected.conf}
   '';
 }

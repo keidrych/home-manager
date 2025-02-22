@@ -6,11 +6,46 @@ let
 
   cfg = config.programs.fzf;
 
+  renderedColors = colors:
+    concatStringsSep ","
+    (mapAttrsToList (name: value: "${name}:${value}") colors);
+
+  hasShellIntegrationEmbedded = lib.versionAtLeast cfg.package.version "0.48.0";
+
+  bashIntegration = if hasShellIntegrationEmbedded then ''
+    if [[ :$SHELLOPTS: =~ :(vi|emacs): ]]; then
+      eval "$(${getExe cfg.package} --bash)"
+    fi
+  '' else ''
+    if [[ :$SHELLOPTS: =~ :(vi|emacs): ]]; then
+      . ${cfg.package}/share/fzf/completion.bash
+      . ${cfg.package}/share/fzf/key-bindings.bash
+    fi
+  '';
+
+  zshIntegration = if hasShellIntegrationEmbedded then ''
+    if [[ $options[zle] = on ]]; then
+      eval "$(${getExe cfg.package} --zsh)"
+    fi
+  '' else ''
+    if [[ $options[zle] = on ]]; then
+      . ${cfg.package}/share/fzf/completion.zsh
+      . ${cfg.package}/share/fzf/key-bindings.zsh
+    fi
+  '';
+
+  fishIntegration = if hasShellIntegrationEmbedded then ''
+    ${getExe cfg.package} --fish | source
+  '' else ''
+    source ${cfg.package}/share/fzf/key-bindings.fish && fzf_key_bindings
+  '';
 in {
   imports = [
     (mkRemovedOptionModule [ "programs" "fzf" "historyWidgetCommand" ]
       "This option is no longer supported by fzf.")
   ];
+
+  meta.maintainers = with lib.maintainers; [ khaneliman ];
 
   options.programs.fzf = {
     enable = mkEnableOption "fzf - a command-line fuzzy finder";
@@ -19,7 +54,7 @@ in {
       type = types.package;
       default = pkgs.fzf;
       defaultText = literalExpression "pkgs.fzf";
-      description = "Package providing the <command>fzf</command> tool.";
+      description = "Package providing the {command}`fzf` tool.";
     };
 
     defaultCommand = mkOption {
@@ -88,9 +123,27 @@ in {
       '';
     };
 
+    colors = mkOption {
+      type = types.attrsOf types.str;
+      default = { };
+      example = literalExpression ''
+        {
+          bg = "#1e1e1e";
+          "bg+" = "#1e1e1e";
+          fg = "#d4d4d4";
+          "fg+" = "#d4d4d4";
+        }
+      '';
+      description = ''
+        Color scheme options added to `FZF_DEFAULT_OPTS`. See
+        <https://github.com/junegunn/fzf/wiki/Color-schemes>
+        for documentation.
+      '';
+    };
+
     tmux = {
       enableShellIntegration = mkEnableOption ''
-        setting <literal>FZF_TMUX=1</literal> which causes shell integration to use fzf-tmux
+        setting `FZF_TMUX=1` which causes shell integration to use fzf-tmux
       '';
 
       shellIntegrationOptions = mkOption {
@@ -98,36 +151,21 @@ in {
         default = [ ];
         example = literalExpression ''[ "-d 40%" ]'';
         description = ''
-          If <option>programs.fzf.tmux.enableShellIntegration</option> is set to <literal>true</literal>,
+          If {option}`programs.fzf.tmux.enableShellIntegration` is set to `true`,
           shell integration will use these options for fzf-tmux.
-          See <command>fzf-tmux --help</command> for available options.
+          See {command}`fzf-tmux --help` for available options.
         '';
       };
     };
 
-    enableBashIntegration = mkOption {
-      default = true;
-      type = types.bool;
-      description = ''
-        Whether to enable Bash integration.
-      '';
-    };
+    enableBashIntegration =
+      lib.hm.shell.mkBashIntegrationOption { inherit config; };
 
-    enableZshIntegration = mkOption {
-      default = true;
-      type = types.bool;
-      description = ''
-        Whether to enable Zsh integration.
-      '';
-    };
+    enableFishIntegration =
+      lib.hm.shell.mkFishIntegrationOption { inherit config; };
 
-    enableFishIntegration = mkOption {
-      default = true;
-      type = types.bool;
-      description = ''
-        Whether to enable Fish integration.
-      '';
-    };
+    enableZshIntegration =
+      lib.hm.shell.mkZshIntegrationOption { inherit config; };
   };
 
   config = mkIf cfg.enable {
@@ -141,7 +179,9 @@ in {
         FZF_CTRL_T_COMMAND = cfg.fileWidgetCommand;
         FZF_CTRL_T_OPTS = cfg.fileWidgetOptions;
         FZF_DEFAULT_COMMAND = cfg.defaultCommand;
-        FZF_DEFAULT_OPTS = cfg.defaultOptions;
+        FZF_DEFAULT_OPTS = cfg.defaultOptions
+          ++ lib.optionals (cfg.colors != { })
+          [ "--color ${renderedColors cfg.colors}" ];
         FZF_TMUX = if cfg.tmux.enableShellIntegration then "1" else null;
         FZF_TMUX_OPTS = cfg.tmux.shellIntegrationOptions;
       });
@@ -149,25 +189,16 @@ in {
     # Note, since fzf unconditionally binds C-r we use `mkOrder` to make the
     # initialization show up a bit earlier. This is to make initialization of
     # other history managers, like mcfly or atuin, take precedence.
-    programs.bash.initExtra = mkIf cfg.enableBashIntegration (mkOrder 200 ''
-      if [[ :$SHELLOPTS: =~ :(vi|emacs): ]]; then
-        . ${cfg.package}/share/fzf/completion.bash
-        . ${cfg.package}/share/fzf/key-bindings.bash
-      fi
-    '');
+    programs.bash.initExtra =
+      mkIf cfg.enableBashIntegration (mkOrder 200 bashIntegration);
 
     # Note, since fzf unconditionally binds C-r we use `mkOrder` to make the
     # initialization show up a bit earlier. This is to make initialization of
     # other history managers, like mcfly or atuin, take precedence.
-    programs.zsh.initExtra = mkIf cfg.enableZshIntegration (mkOrder 200 ''
-      if [[ $options[zle] = on ]]; then
-        . ${cfg.package}/share/fzf/completion.zsh
-        . ${cfg.package}/share/fzf/key-bindings.zsh
-      fi
-    '');
+    programs.zsh.initExtra =
+      mkIf cfg.enableZshIntegration (mkOrder 200 zshIntegration);
 
-    programs.fish.shellInit = mkIf cfg.enableFishIntegration ''
-      source ${cfg.package}/share/fzf/key-bindings.fish && fzf_key_bindings
-    '';
+    programs.fish.interactiveShellInit =
+      mkIf cfg.enableFishIntegration (mkOrder 200 fishIntegration);
   };
 }

@@ -12,10 +12,10 @@ let
         type = types.path;
         description = ''
           Path to the plugin folder.
-          </para><para>
+
           Relevant pieces will be added to the fish function path and
-          the completion path. The <filename>init.fish</filename> and
-          <filename>key_binding.fish</filename> files are sourced if
+          the completion path. The {file}`init.fish` and
+          {file}`key_binding.fish` files are sourced if
           they exist.
         '';
       };
@@ -66,7 +66,7 @@ let
       };
 
       onEvent = mkOption {
-        type = with types; nullOr str;
+        type = with types; nullOr (either str (listOf str));
         default = null;
         description = ''
           Tells fish to run this function when the specified named event is
@@ -89,7 +89,7 @@ let
         default = null;
         description = ''
           Tells fish to run this function when the job with the specified group
-          ID exits. Instead of a PID, the stringer <literal>caller</literal> can
+          ID exits. Instead of a PID, the stringer `caller` can
           be specified. This is only legal when in a command substitution, and
           will result in the handler being triggered by the exit of the job
           which created this command substitution.
@@ -103,8 +103,8 @@ let
         description = ''
           Tells fish to run this function when the fish child process with the
           specified process ID exits. Instead of a PID, for backwards
-          compatibility, <literal>%self</literal> can be specified as an alias
-          for <literal>$fish_pid</literal>, and the function will be run when
+          compatibility, `%self` can be specified as an alias
+          for `$fish_pid`, and the function will be run when
           the current fish instance exits.
         '';
       };
@@ -138,12 +138,96 @@ let
     };
   };
 
-  abbrsStr = concatStringsSep "\n"
-    (mapAttrsToList (k: v: "abbr --add --global -- ${k} ${escapeShellArg v}")
-      cfg.shellAbbrs);
+  abbrModule = types.submodule {
+    options = {
+      expansion = mkOption {
+        type = with types; nullOr str;
+        default = null;
+        description = ''
+          The command expanded by an abbreviation.
+        '';
+      };
+
+      position = mkOption {
+        type = with types; nullOr str;
+        default = null;
+        example = "anywhere";
+        description = ''
+          If the position is "command", the abbreviation expands only if
+          the position is a command. If it is "anywhere", the abbreviation
+          expands anywhere.
+        '';
+      };
+
+      regex = mkOption {
+        type = with types; nullOr str;
+        default = null;
+        description = ''
+          The regular expression pattern matched instead of the literal name.
+        '';
+      };
+
+      setCursor = mkOption {
+        type = with types; (either bool str);
+        default = false;
+        description = ''
+          The marker indicates the position of the cursor when the abbreviation
+          is expanded. When setCursor is true, the marker is set with a default
+          value of "%".
+        '';
+      };
+
+      function = mkOption {
+        type = with types; nullOr str;
+        default = null;
+        description = ''
+          The fish function expanded instead of a literal string.
+        '';
+      };
+    };
+  };
+
+  abbrsStr = concatStringsSep "\n" (mapAttrsToList (name: def:
+    let
+      mods = with def;
+        cli.toGNUCommandLineShell {
+          mkOption = k: v:
+            if v == null then
+              [ ]
+            else if k == "set-cursor" then
+              [ "--${k}=${lib.generators.mkValueStringDefault { } v}" ]
+            else [
+              "--${k}"
+              (lib.generators.mkValueStringDefault { } v)
+            ];
+        } {
+          inherit position regex function;
+          set-cursor = setCursor;
+        };
+      modifiers = if isAttrs def then mods else "";
+      expansion = if isAttrs def then def.expansion else def;
+    in "abbr --add ${modifiers} -- ${name}"
+    + optionalString (expansion != null) " ${escapeShellArg expansion}")
+    cfg.shellAbbrs);
 
   aliasesStr = concatStringsSep "\n"
     (mapAttrsToList (k: v: "alias ${k} ${escapeShellArg v}") cfg.shellAliases);
+
+  fishIndent = name: text:
+    pkgs.runCommand name {
+      nativeBuildInputs = [ cfg.package ];
+      inherit text;
+      passAsFile = [ "text" ];
+    } "env HOME=$(mktemp -d) fish_indent < $textPath > $out";
+
+  translatedSessionVariables =
+    pkgs.runCommandLocal "hm-session-vars.fish" { } ''
+      (echo "function setup_hm_session_vars;"
+      ${pkgs.buildPackages.babelfish}/bin/babelfish \
+      <${config.home.sessionVariablesPackage}/etc/profile.d/hm-session-vars.sh
+      echo "end"
+      echo "setup_hm_session_vars") > $out
+    '';
 
 in {
   imports = [
@@ -169,6 +253,12 @@ in {
         '';
       };
 
+      generateCompletions = mkEnableOption
+        "the automatic generation of completions based upon installed man pages"
+        // {
+          default = true;
+        };
+
       shellAliases = mkOption {
         type = with types; attrsOf str;
         default = { };
@@ -185,16 +275,32 @@ in {
       };
 
       shellAbbrs = mkOption {
-        type = with types; attrsOf str;
+        type = with types; attrsOf (either str abbrModule);
         default = { };
-        example = {
-          l = "less";
-          gco = "git checkout";
-        };
+        example = literalExpression ''
+          {
+            l = "less";
+            gco = "git checkout";
+            "-C" = {
+              position = "anywhere";
+              expansion = "--color";
+            };
+          }
+        '';
         description = ''
           An attribute set that maps aliases (the top level attribute names
           in this option) to abbreviations. Abbreviations are expanded with
           the longer phrase after they are entered.
+        '';
+      };
+
+      preferAbbrs = mkOption {
+        type = types.bool;
+        default = false;
+        example = true;
+        description = ''
+          If enabled, abbreviations will be preferred over aliases when
+          other modules define aliases for fish.
         '';
       };
 
@@ -222,6 +328,15 @@ in {
         description = ''
           Shell script code called during interactive fish shell
           initialisation.
+        '';
+      };
+
+      shellInitLast = mkOption {
+        type = types.lines;
+        default = "";
+        description = ''
+          Shell script code called during interactive fish shell
+          initialisation, this will be the last thing executed in fish startup.
         '';
       };
     };
@@ -256,7 +371,7 @@ in {
       '';
       description = ''
         The plugins to source in
-        <filename>conf.d/99plugins.fish</filename>.
+        {file}`conf.d/99plugins.fish`.
       '';
     };
 
@@ -275,15 +390,17 @@ in {
       '';
       description = ''
         Basic functions to add to fish. For more information see
-        <link xlink:href="https://fishshell.com/docs/current/cmds/function.html"/>.
+        <https://fishshell.com/docs/current/cmds/function.html>.
       '';
     };
-
   };
 
   config = mkIf cfg.enable (mkMerge [
-    {
-      home.packages = [ cfg.package ];
+    { home.packages = [ cfg.package ]; }
+
+    (mkIf cfg.generateCompletions {
+      # Support completion for `man` by building a cache for `apropos`.
+      programs.man.generateCaches = mkDefault true;
 
       xdg.dataFile."fish/home-manager_generated_completions".source = let
         # paths later in the list will overwrite those already linked
@@ -304,20 +421,29 @@ in {
             ${postBuild}
           '';
 
-        generateCompletions = package:
-          pkgs.runCommand "${package.name}-fish-completions" {
-            src = package;
-            nativeBuildInputs = [ pkgs.python2 ];
-            buildInputs = [ cfg.package ];
-            preferLocalBuild = true;
-          } ''
-            mkdir -p $out
+        generateCompletions = let
+          getName = attrs:
+            attrs.name or "${attrs.pname or "«pname-missing»"}-${
+              attrs.version or "«version-missing»"
+            }";
+        in package:
+        pkgs.runCommand "${getName package}-fish-completions" {
+          srcs = [ package ] ++ filter (p: p != null)
+            (builtins.map (outName: package.${outName} or null)
+              config.home.extraOutputsToInstall);
+          nativeBuildInputs = [ pkgs.python3 ];
+          buildInputs = [ cfg.package ];
+          preferLocalBuild = true;
+        } ''
+          mkdir -p $out
+          for src in $srcs; do
             if [ -d $src/share/man ]; then
-              find $src/share/man -type f \
+              find -L $src/share/man -type f \
                 | xargs python ${cfg.package}/share/fish/tools/create_manpage_completions.py --directory $out \
                 > /dev/null
             fi
-          '';
+          done
+        '';
       in destructiveSymlinkJoin {
         name = "${config.home.username}-fish-completions";
         paths =
@@ -336,8 +462,10 @@ in {
           set fish_complete_path $prev "${config.xdg.dataHome}/fish/home-manager_generated_completions" $post
         end
       '';
+    })
 
-      xdg.configFile."fish/config.fish".text = ''
+    {
+      xdg.configFile."fish/config.fish".source = fishIndent "config.fish" ''
         # ~/.config/fish/config.fish: DO NOT EDIT -- this file has been generated
         # automatically by home-manager.
 
@@ -345,20 +473,18 @@ in {
         set -q __fish_home_manager_config_sourced; and exit
         set -g __fish_home_manager_config_sourced 1
 
-        set --prepend fish_function_path ${pkgs.fishPlugins.foreign-env}/share/fish/vendor_functions.d
-        fenv source ${config.home.profileDirectory}/etc/profile.d/hm-session-vars.sh > /dev/null
-        set -e fish_function_path[1]
+        source ${translatedSessionVariables}
 
         ${cfg.shellInit}
 
-        status --is-login; and begin
+        status is-login; and begin
 
           # Login shell initialisation
           ${cfg.loginShellInit}
 
         end
 
-        status --is-interactive; and begin
+        status is-interactive; and begin
 
           # Abbreviations
           ${abbrsStr}
@@ -366,24 +492,26 @@ in {
           # Aliases
           ${aliasesStr}
 
-          # Interactive shell intialisation
+          # Interactive shell initialisation
           ${cfg.interactiveShellInit}
 
         end
+
+        ${cfg.shellInitLast}
       '';
     }
     {
       xdg.configFile = mapAttrs' (name: def: {
         name = "fish/functions/${name}.fish";
         value = {
-          text = let
+          source = let
             modifierStr = n: v: optional (v != null) ''--${n}="${toString v}"'';
             modifierStrs = n: v: optional (v != null) "--${n}=${toString v}";
             modifierBool = n: v: optional (v != null && v) "--${n}";
 
             mods = with def;
               modifierStr "description" description ++ modifierStr "wraps" wraps
-              ++ modifierStr "on-event" onEvent
+              ++ lib.concatMap (modifierStr "on-event") (lib.toList onEvent)
               ++ modifierStr "on-variable" onVariable
               ++ modifierStr "on-job-exit" onJobExit
               ++ modifierStr "on-process-exit" onProcessExit
@@ -394,9 +522,9 @@ in {
 
             modifiers = if isAttrs def then " ${toString mods}" else "";
             body = if isAttrs def then def.body else def;
-          in ''
+          in fishIndent "${name}.fish" ''
             function ${name}${modifiers}
-              ${body}
+              ${lib.strings.removeSuffix "\n" body}
             end
           '';
         };
@@ -407,34 +535,35 @@ in {
     # in the paths and any initialization scripts.
     (mkIf (length cfg.plugins > 0) {
       xdg.configFile = mkMerge ((map (plugin: {
-        "fish/conf.d/plugin-${plugin.name}.fish".text = ''
-          # Plugin ${plugin.name}
-          set -l plugin_dir ${plugin.src}
+        "fish/conf.d/plugin-${plugin.name}.fish".source =
+          fishIndent "${plugin.name}.fish" ''
+            # Plugin ${plugin.name}
+            set -l plugin_dir ${plugin.src}
 
-          # Set paths to import plugin components
-          if test -d $plugin_dir/functions
-            set fish_function_path $fish_function_path[1] $plugin_dir/functions $fish_function_path[2..-1]
-          end
-
-          if test -d $plugin_dir/completions
-            set fish_complete_path $fish_complete_path[1] $plugin_dir/completions $fish_complete_path[2..-1]
-          end
-
-          # Source initialization code if it exists.
-          if test -d $plugin_dir/conf.d
-            for f in $plugin_dir/conf.d/*.fish
-              source $f
+            # Set paths to import plugin components
+            if test -d $plugin_dir/functions
+              set fish_function_path $fish_function_path[1] $plugin_dir/functions $fish_function_path[2..-1]
             end
-          end
 
-          if test -f $plugin_dir/key_bindings.fish
-            source $plugin_dir/key_bindings.fish
-          end
+            if test -d $plugin_dir/completions
+              set fish_complete_path $fish_complete_path[1] $plugin_dir/completions $fish_complete_path[2..-1]
+            end
 
-          if test -f $plugin_dir/init.fish
-            source $plugin_dir/init.fish
-          end
-        '';
+            # Source initialization code if it exists.
+            if test -d $plugin_dir/conf.d
+              for f in $plugin_dir/conf.d/*.fish
+                source $f
+              end
+            end
+
+            if test -f $plugin_dir/key_bindings.fish
+              source $plugin_dir/key_bindings.fish
+            end
+
+            if test -f $plugin_dir/init.fish
+              source $plugin_dir/init.fish
+            end
+          '';
       }) cfg.plugins));
     })
   ]);

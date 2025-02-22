@@ -4,21 +4,19 @@ let
 
   cfg = config.systemd.user;
 
-  inherit (lib) getAttr hm isBool literalExpression mkIf mkMerge mkOption types;
+  inherit (lib)
+    any attrValues getAttr hm isBool literalExpression mkIf mkMerge
+    mkEnableOption mkOption types;
+
+  settingsFormat = pkgs.formats.ini { listsAsDuplicateKeys = true; };
 
   # From <nixpkgs/nixos/modules/system/boot/systemd-lib.nix>
   mkPathSafeName =
-    lib.replaceChars [ "@" ":" "\\" "[" "]" ] [ "-" "-" "-" "" "" ];
+    lib.replaceStrings [ "@" ":" "\\" "[" "]" ] [ "-" "-" "-" "" "" ];
 
-  enabled = cfg.services != { } # \
-    || cfg.slices != { } # \
-    || cfg.sockets != { } # \
-    || cfg.targets != { } # \
-    || cfg.timers != { } # \
-    || cfg.paths != { } # \
-    || cfg.mounts != { } # \
-    || cfg.automounts != { } # \
-    || cfg.sessionVariables != { };
+  removeIfEmpty = attrs: names:
+    lib.filterAttrs (name: value: !(builtins.elem name names) || value != "")
+    attrs;
 
   toSystemdIni = lib.generators.toINI {
     listsAsDuplicateKeys = true;
@@ -41,17 +39,18 @@ let
       source = pkgs.writeTextFile {
         name = pathSafeName;
         text = toSystemdIni serviceCfg;
-        destination = lib.escapeShellArg "/${filename}";
+        destination = "/${filename}";
       } + "/${filename}";
 
-      wantedBy = target: {
-        name = "systemd/user/${target}.wants/${filename}";
+      install = variant: target: {
+        name = "systemd/user/${target}.${variant}/${filename}";
         value = { inherit source; };
       };
     in lib.singleton {
       name = "systemd/user/${filename}";
       value = { inherit source; };
-    } ++ map wantedBy (serviceCfg.Install.WantedBy or [ ]);
+    } ++ map (install "wants") (serviceCfg.Install.WantedBy or [ ])
+    ++ map (install "requires") (serviceCfg.Install.RequiredBy or [ ]);
 
   buildServices = style: serviceCfgs:
     lib.concatLists (lib.mapAttrsToList (buildService style) serviceCfgs);
@@ -60,7 +59,7 @@ let
 
   unitType = unitKind:
     with types;
-    let primitive = either bool (either int str);
+    let primitive = oneOf [ bool int str path ];
     in attrsOf (attrsOf (attrsOf (either primitive (listOf primitive)))) // {
       description = "systemd ${unitKind} unit configuration";
     };
@@ -68,13 +67,10 @@ let
   unitDescription = type: ''
     Definition of systemd per-user ${type} units. Attributes are
     merged recursively.
-    </para><para>
+
     Note that the attributes follow the capitalization and naming used
     by systemd. More details can be found in
-    <citerefentry>
-      <refentrytitle>systemd.${type}</refentrytitle>
-      <manvolnum>5</manvolnum>
-    </citerefentry>.
+    {manpage}`systemd.${type}(5)`.
   '';
 
   unitExample = type:
@@ -99,17 +95,29 @@ let
       + "\n";
   };
 
+  settings = mkIf (any (v: v != { }) (attrValues cfg.settings)) {
+    "systemd/user.conf".source =
+      settingsFormat.generate "user.conf" cfg.settings;
+  };
+
+  configHome = lib.removePrefix config.home.homeDirectory config.xdg.configHome;
+
 in {
   meta.maintainers = [ lib.maintainers.rycee ];
 
   options = {
     systemd.user = {
+      enable = mkEnableOption "the user systemd service manager" // {
+        default = pkgs.stdenv.isLinux;
+        defaultText = literalExpression "pkgs.stdenv.isLinux";
+      };
+
       systemctlPath = mkOption {
         default = "${pkgs.systemd}/bin/systemctl";
-        defaultText = "\${pkgs.systemd}/bin/systemctl";
+        defaultText = literalExpression ''"''${pkgs.systemd}/bin/systemctl"'';
         type = types.str;
         description = ''
-          Absolute path to the <command>systemctl</command> tool. This
+          Absolute path to the {command}`systemctl` tool. This
           option may need to be set if running Home Manager on a
           non-NixOS distribution.
         '';
@@ -118,98 +126,78 @@ in {
       services = mkOption {
         default = { };
         type = unitType "service";
-        description = unitDescription "service";
+        description = (unitDescription "service");
         example = unitExample "Service";
       };
 
       slices = mkOption {
         default = { };
-        type = unitType "slices";
-        description = unitDescription "slices";
-        example = unitExample "Slices";
+        type = unitType "slice";
+        description = (unitDescription "slice");
+        example = unitExample "Slice";
       };
 
       sockets = mkOption {
         default = { };
         type = unitType "socket";
-        description = unitDescription "socket";
+        description = (unitDescription "socket");
         example = unitExample "Socket";
       };
 
       targets = mkOption {
         default = { };
         type = unitType "target";
-        description = unitDescription "target";
+        description = (unitDescription "target");
         example = unitExample "Target";
       };
 
       timers = mkOption {
         default = { };
         type = unitType "timer";
-        description = unitDescription "timer";
+        description = (unitDescription "timer");
         example = unitExample "Timer";
       };
 
       paths = mkOption {
         default = { };
         type = unitType "path";
-        description = unitDescription "path";
+        description = (unitDescription "path");
         example = unitExample "Path";
       };
 
       mounts = mkOption {
         default = { };
         type = unitType "mount";
-        description = unitDescription "mount";
+        description = (unitDescription "mount");
         example = unitExample "Mount";
       };
 
       automounts = mkOption {
         default = { };
         type = unitType "automount";
-        description = unitDescription "automount";
+        description = (unitDescription "automount");
         example = unitExample "Automount";
       };
 
       startServices = mkOption {
-        default = "suggest";
-        type = with types;
-          either bool (enum [ "suggest" "legacy" "sd-switch" ]);
-        apply = p: if isBool p then if p then "legacy" else "suggest" else p;
+        type = with types; either bool (enum [ "suggest" "sd-switch" ]);
+        apply = p: if isBool p then p else p == "sd-switch";
+        default = true;
         description = ''
           Whether new or changed services that are wanted by active targets
           should be started. Additionally, stop obsolete services from the
           previous generation.
-          </para><para>
+
           The alternatives are
-          <variablelist>
-          <varlistentry>
-            <term><literal>suggest</literal> (or <literal>false</literal>)</term>
-            <listitem><para>
-              Use a very simple shell script to print suggested
-              <command>systemctl</command> commands to run. You will have to
-              manually run those commands after the switch.
-            </para></listitem>
-          </varlistentry>
-          <varlistentry>
-            <term><literal>legacy</literal> (or <literal>true</literal>)</term>
-            <listitem><para>
-              Use a Ruby script to, in a more robust fashion, determine the
-              necessary changes and automatically run the
-              <command>systemctl</command> commands.
-            </para></listitem>
-          </varlistentry>
-          <varlistentry>
-            <term><literal>sd-switch</literal></term>
-            <listitem><para>
-              Use sd-switch, a third party application, to perform the service
-              updates. This tool offers more features while having a small
-              closure size. Note, it requires a fully functional user D-Bus
-              session. Once tested and deemed sufficiently robust, this will
-              become the default.
-            </para></listitem>
-          </varlistentry>
-          </variablelist>
+
+          `suggest` (or `false`)
+          : Use a very simple shell script to print suggested
+            {command}`systemctl` commands to run. You will have to
+            manually run those commands after the switch.
+
+          `sd-switch` (or `true`)
+          : Use sd-switch, a tool that determines the necessary changes and
+            automatically apply them.
         '';
       };
 
@@ -229,101 +217,155 @@ in {
         description = ''
           Environment variables that will be set for the user session.
           The variable values must be as described in
-          <citerefentry>
-            <refentrytitle>environment.d</refentrytitle>
-            <manvolnum>5</manvolnum>
-          </citerefentry>.
+          {manpage}`environment.d(5)`.
+        '';
+      };
+
+      settings = mkOption {
+        apply = sections:
+          sections // {
+            # Setting one of these to an empty value would reset any
+            # previous settings, so we’ll remove them instead if they
+            # are not explicitly set.
+            Manager = removeIfEmpty sections.Manager [
+              "ManagerEnvironment"
+              "DefaultEnvironment"
+            ];
+          };
+
+        type = types.submodule {
+          freeformType = settingsFormat.type;
+
+          options = let
+            inherit (lib) concatStringsSep escapeShellArg mapAttrsToList;
+            environmentOption = args:
+              mkOption {
+                type = with types;
+                  attrsOf (nullOr (oneOf [ str path package ]));
+                default = { };
+                example = literalExpression ''
+                  {
+                    PATH = "%u/bin:%u/.cargo/bin";
+                  }
+                '';
+                apply = value:
+                  concatStringsSep " "
+                  (mapAttrsToList (n: v: "${n}=${escapeShellArg v}") value);
+              } // args;
+          in {
+            Manager = {
+              DefaultEnvironment = environmentOption {
+                description = ''
+                  Configures environment variables passed to all executed processes.
+                '';
+              };
+              ManagerEnvironment = environmentOption {
+                description = ''
+                  Sets environment variables just for the manager process itself.
+                '';
+              };
+            };
+          };
+        };
+        default = { };
+        example = literalExpression ''
+          {
+            Manager.DefaultCPUAccounting = true;
+          }
+        '';
+        description = ''
+          Extra config options for user session service manager. See {manpage}`systemd-user.conf(5)` for
+          available options.
         '';
       };
     };
   };
 
-  config = mkMerge [
-    {
-      assertions = [{
-        assertion = enabled -> pkgs.stdenv.isLinux;
-        message = let
-          names = lib.concatStringsSep ", " (lib.attrNames ( # \
-            cfg.services # \
-            // cfg.slices # \
-            // cfg.sockets # \
-            // cfg.targets # \
-            // cfg.timers # \
-            // cfg.paths # \
-            // cfg.mounts # \
-            // cfg.sessionVariables));
-        in "Must use Linux for modules that require systemd: " + names;
-      }];
-    }
+  # If we run under a Linux system we assume that systemd is
+  # available, in particular we assume that systemctl is in PATH.
+  # Do not install any user services if username is root.
+  config = mkIf (cfg.enable && config.home.username != "root") {
+    assertions = [{
+      assertion = pkgs.stdenv.isLinux;
+      message = "This module is only available on Linux.";
+    }];
 
-    # If we run under a Linux system we assume that systemd is
-    # available, in particular we assume that systemctl is in PATH.
-    # Do not install any user services if username is root.
-    (mkIf (pkgs.stdenv.isLinux && config.home.username != "root") {
-      xdg.configFile = mkMerge [
-        (lib.listToAttrs ((buildServices "service" cfg.services)
-          ++ (buildServices "slices" cfg.slices)
-          ++ (buildServices "socket" cfg.sockets)
-          ++ (buildServices "target" cfg.targets)
-          ++ (buildServices "timer" cfg.timers)
-          ++ (buildServices "path" cfg.paths)
-          ++ (buildServices "mount" cfg.mounts)
-          ++ (buildServices "automount" cfg.automounts)))
+    xdg.configFile = mkMerge [
+      (lib.listToAttrs ((buildServices "service" cfg.services)
+        ++ (buildServices "slice" cfg.slices)
+        ++ (buildServices "socket" cfg.sockets)
+        ++ (buildServices "target" cfg.targets)
+        ++ (buildServices "timer" cfg.timers)
+        ++ (buildServices "path" cfg.paths)
+        ++ (buildServices "mount" cfg.mounts)
+        ++ (buildServices "automount" cfg.automounts)))
 
-        sessionVariables
-      ];
+      sessionVariables
 
-      # Run systemd service reload if user is logged in. If we're
-      # running this from the NixOS module then XDG_RUNTIME_DIR is not
-      # set and systemd commands will fail. We'll therefore have to
-      # set it ourselves in that case.
-      home.activation.reloadSystemd = hm.dag.entryAfter [ "linkGeneration" ]
-        (let
-          cmd = {
-            suggest = ''
-              PATH=${dirOf cfg.systemctlPath}:$PATH \
-              bash ${./systemd-activate.sh} "''${oldGenPath=}" "$newGenPath"
-            '';
-            legacy = ''
-              PATH=${dirOf cfg.systemctlPath}:$PATH \
-              ${pkgs.ruby}/bin/ruby ${./systemd-activate.rb} \
-                "''${oldGenPath=}" "$newGenPath" "${servicesStartTimeoutMs}"
-            '';
-            sd-switch = let
-              timeoutArg = if cfg.servicesStartTimeoutMs != 0 then
-                "--timeout " + servicesStartTimeoutMs
-              else
-                "";
-            in ''
-              ${pkgs.sd-switch}/bin/sd-switch \
-                ''${DRY_RUN:+--dry-run} $VERBOSE_ARG ${timeoutArg} \
-                ''${oldGenPath:+--old-units $oldGenPath/home-files/.config/systemd/user} \
-                --new-units $newGenPath/home-files/.config/systemd/user
-            '';
-          };
+      settings
+    ];
 
-          ensureRuntimeDir =
-            "XDG_RUNTIME_DIR=\${XDG_RUNTIME_DIR:-/run/user/$(id -u)}";
+    # Run systemd service reload if user is logged in. If we're
+    # running this from the NixOS module then XDG_RUNTIME_DIR is not
+    # set and systemd commands will fail. We'll therefore have to
+    # set it ourselves in that case.
+    home.activation.reloadSystemd = hm.dag.entryAfter [ "linkGeneration" ] (let
+      suggestCmd = ''
+        bash ${./systemd-activate.sh} "''${oldGenPath=}" "$newGenPath"
+      '';
 
-          systemctl = "${ensureRuntimeDir} ${cfg.systemctlPath}";
-        in ''
-          systemdStatus=$(${systemctl} --user is-system-running 2>&1 || true)
+      sdSwitchCmd = let
+        timeoutArg = if cfg.servicesStartTimeoutMs != 0 then
+          "--timeout " + servicesStartTimeoutMs
+        else
+          "";
+      in ''
+        ${lib.getExe pkgs.sd-switch} \
+          ''${DRY_RUN:+--dry-run} $VERBOSE_ARG ${timeoutArg} \
+          ''${oldUnitsDir:+--old-units $oldUnitsDir} \
+          --new-units "$newUnitsDir"
+      '';
 
-          if [[ $systemdStatus == 'running' || $systemdStatus == 'degraded' ]]; then
-            if [[ $systemdStatus == 'degraded' ]]; then
-              warnEcho "The user systemd session is degraded:"
-              ${systemctl} --user --no-pager --state=failed
-              warnEcho "Attempting to reload services anyway..."
-            fi
+      systemdCmd = if cfg.startServices then sdSwitchCmd else suggestCmd;
 
-            ${ensureRuntimeDir} \
-              ${getAttr cfg.startServices cmd}
-          else
-            echo "User systemd daemon not running. Skipping reload."
+      # Make sure that we have an environment where we are likely to
+      # successfully talk with systemd.
+      ensureSystemd = ''
+        env XDG_RUNTIME_DIR="''${XDG_RUNTIME_DIR:-/run/user/$(id -u)}" \
+            PATH="${dirOf cfg.systemctlPath}:$PATH" \
+      '';
+
+      systemctl = "${ensureSystemd} systemctl";
+    in ''
+      systemdStatus=$(${systemctl} --user is-system-running 2>&1 || true)
+
+      if [[ $systemdStatus == 'running' || $systemdStatus == 'degraded' ]]; then
+        if [[ $systemdStatus == 'degraded' ]]; then
+          warnEcho "The user systemd session is degraded:"
+          ${systemctl} --user --no-pager --state=failed
+          warnEcho "Attempting to reload services anyway..."
+        fi
+
+        if [[ -v oldGenPath ]]; then
+          oldUnitsDir="$oldGenPath/home-files${configHome}/systemd/user"
+          if [[ ! -e $oldUnitsDir ]]; then
+            oldUnitsDir=
           fi
+        fi
 
-          unset systemdStatus
-        '');
-    })
-  ];
+        newUnitsDir="$newGenPath/home-files${configHome}/systemd/user"
+        if [[ ! -e $newUnitsDir ]]; then
+          newUnitsDir=${pkgs.emptyDirectory}
+        fi
+
+        ${ensureSystemd} ${systemdCmd}
+
+        unset newUnitsDir oldUnitsDir
+      else
+        echo "User systemd daemon not running. Skipping reload."
+      fi
+
+      unset systemdStatus
+    '');
+  };
 }

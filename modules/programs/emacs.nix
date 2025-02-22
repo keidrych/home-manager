@@ -9,15 +9,20 @@ let
   # Copied from all-packages.nix, with modifications to support
   # overrides.
   emacsPackages = let epkgs = pkgs.emacsPackagesFor cfg.package;
-  in epkgs.overrideScope' cfg.overrides;
+  in epkgs.overrideScope cfg.overrides;
 
   emacsWithPackages = emacsPackages.emacsWithPackages;
 
-  createConfPackage = epkgs:
-    epkgs.trivialBuild {
-      pname = "default";
-      src = pkgs.writeText "default.el" cfg.extraConfig;
-    };
+  extraPackages = epkgs:
+    let
+      packages = cfg.extraPackages epkgs;
+      userConfig = epkgs.trivialBuild {
+        pname = "default";
+        src = pkgs.writeText "default.el" cfg.extraConfig;
+        version = "0.1.0";
+        packageRequires = packages;
+      };
+    in packages ++ optional (cfg.extraConfig != "") userConfig;
 
 in {
   meta.maintainers = [ maintainers.rycee ];
@@ -46,8 +51,12 @@ in {
         '';
         description = ''
           Configuration to include in the Emacs default init file. See
-          <link xlink:href="https://www.gnu.org/software/emacs/manual/html_node/elisp/Init-File.html"/>
+          <https://www.gnu.org/software/emacs/manual/html_node/elisp/Init-File.html>
           for more.
+
+          Note, the `inhibit-startup-message` Emacs option
+          cannot be set here since Emacs disallows setting it from the default
+          initialization file.
         '';
       };
 
@@ -59,7 +68,7 @@ in {
         description = ''
           Extra packages available to Emacs. To get a list of
           available packages run:
-          <command>nix-env -f '&lt;nixpkgs&gt;' -qaP -A emacsPackages</command>.
+          {command}`nix-env -f '<nixpkgs>' -qaP -A emacsPackages`.
         '';
       };
 
@@ -91,10 +100,6 @@ in {
 
   config = mkIf cfg.enable {
     home.packages = [ cfg.finalPackage ];
-    programs.emacs = {
-      finalPackage = emacsWithPackages cfg.extraPackages;
-      extraPackages = epkgs:
-        optional (cfg.extraConfig != "") (createConfPackage epkgs);
-    };
+    programs.emacs.finalPackage = emacsWithPackages extraPackages;
   };
 }

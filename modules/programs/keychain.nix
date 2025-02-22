@@ -16,7 +16,7 @@ let
     }";
 
 in {
-  meta.maintainers = [ maintainers.marsam ];
+  meta.maintainers = [ ];
 
   options.programs.keychain = {
     enable = mkEnableOption "keychain";
@@ -63,36 +63,24 @@ in {
       '';
     };
 
-    enableBashIntegration = mkOption {
-      default = true;
-      type = types.bool;
-      description = ''
-        Whether to enable Bash integration.
-      '';
-    };
+    enableBashIntegration =
+      lib.hm.shell.mkBashIntegrationOption { inherit config; };
 
-    enableFishIntegration = mkOption {
-      default = true;
-      type = types.bool;
-      description = ''
-        Whether to enable Fish integration.
-      '';
-    };
+    enableFishIntegration =
+      lib.hm.shell.mkFishIntegrationOption { inherit config; };
 
-    enableZshIntegration = mkOption {
-      default = true;
-      type = types.bool;
-      description = ''
-        Whether to enable Zsh integration.
-      '';
-    };
+    enableNushellIntegration =
+      lib.hm.shell.mkNushellIntegrationOption { inherit config; };
+
+    enableZshIntegration =
+      lib.hm.shell.mkZshIntegrationOption { inherit config; };
 
     enableXsessionIntegration = mkOption {
       default = true;
       type = types.bool;
       visible = pkgs.stdenv.hostPlatform.isLinux;
       description = ''
-        Whether to run keychain from your <filename>~/.xsession</filename>.
+        Whether to run keychain from your {file}`~/.xsession`.
       '';
     };
   };
@@ -100,16 +88,22 @@ in {
   config = mkIf cfg.enable {
     home.packages = [ cfg.package ];
     programs.bash.initExtra = mkIf cfg.enableBashIntegration ''
-      eval "$(${shellCommand})"
+      eval "$(SHELL=bash ${shellCommand})"
     '';
     programs.fish.interactiveShellInit = mkIf cfg.enableFishIntegration ''
-      eval (${shellCommand})
+      SHELL=fish eval (${shellCommand})
     '';
     programs.zsh.initExtra = mkIf cfg.enableZshIntegration ''
-      eval "$(${shellCommand})"
+      eval "$(SHELL=zsh ${shellCommand})"
+    '';
+    programs.nushell.extraConfig = mkIf cfg.enableNushellIntegration ''
+      let keychain_shell_command = (SHELL=bash ${shellCommand}| parse -r '(\w+)=(.*); export \1' | transpose -ird)
+      if not ($keychain_shell_command|is-empty) {
+        $keychain_shell_command | load-env
+      }
     '';
     xsession.initExtra = mkIf cfg.enableXsessionIntegration ''
-      eval "$(${shellCommand})"
+      eval "$(SHELL=bash ${shellCommand})"
     '';
   };
 }

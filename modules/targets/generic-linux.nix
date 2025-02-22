@@ -8,6 +8,8 @@ let
 
   profileDirectory = config.home.profileDirectory;
 
+  nixPkg = if config.nix.package == null then pkgs.nix else config.nix.package;
+
 in {
   imports = [
     (mkRenamedOptionModule [ "targets" "genericLinux" "extraXdgDataDirs" ] [
@@ -43,8 +45,19 @@ in {
       "/var/lib/snapd/desktop"
     ];
 
+    # We need to append system-wide FHS directories due to the default prefix
+    # resolving to the Nix store.
+    # https://github.com/nix-community/home-manager/pull/2891#issuecomment-1101064521
+    home.sessionVariables = {
+      XCURSOR_PATH = "$XCURSOR_PATH\${XCURSOR_PATH:+:}" + concatStringsSep ":" [
+        "${config.home.profileDirectory}/share/icons"
+        "/usr/share/icons"
+        "/usr/share/pixmaps"
+      ];
+    };
+
     home.sessionVariablesExtra = ''
-      . "${pkgs.nix}/etc/profile.d/nix.sh"
+      . "${nixPkg}/etc/profile.d/nix.sh"
 
       # reset TERM with new TERMINFO available (if any)
       export TERM="$TERM"
@@ -53,7 +66,7 @@ in {
     # We need to source both nix.sh and hm-session-vars.sh as noted in
     # https://github.com/nix-community/home-manager/pull/797#issuecomment-544783247
     programs.bash.initExtra = ''
-      . "${pkgs.nix}/etc/profile.d/nix.sh"
+      . "${nixPkg}/etc/profile.d/nix.sh"
       . "${profileDirectory}/etc/profile.d/hm-session-vars.sh"
     '';
 
@@ -86,7 +99,11 @@ in {
         "/usr/share/terminfo" # package default, all distros
       ];
     in {
-      NIX_PATH = "$HOME/.nix-defexpr/channels\${NIX_PATH:+:}$NIX_PATH";
+      NIX_PATH = if config.nix.enable
+      && (config.nix.settings.use-xdg-base-directories or false) then
+        "${config.xdg.stateHome}/nix/defexpr/channels\${NIX_PATH:+:}$NIX_PATH"
+      else
+        "$HOME/.nix-defexpr/channels\${NIX_PATH:+:}$NIX_PATH";
       TERMINFO_DIRS =
         "${profileDirectory}/share/terminfo:$TERMINFO_DIRS\${TERMINFO_DIRS:+:}${distroTerminfoDirs}";
     };

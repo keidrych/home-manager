@@ -1,16 +1,15 @@
-{ config, lib, pkgs, ... }:
-
 {
   programs.gh = {
     enable = true;
-    enableGitCredentialHelper = true;
+    gitCredentialHelper = {
+      enable = true;
+      hosts = [ "https://github.com" "https://github.example.com" ];
+    };
   };
 
-  programs.git.enable = true;
-
-  test.stubs = {
-    gh = { };
-    git = { };
+  programs.git = {
+    enable = true;
+    signing.signer = "path-to-gpg";
   };
 
   nmt.script = ''

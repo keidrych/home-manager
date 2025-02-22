@@ -49,8 +49,8 @@ let
     ${optionalString cfg.newSession "new-session"}
 
     ${optionalString cfg.reverseSplit ''
-      bind v split-window -h
-      bind s split-window -v
+      bind -N "Split the pane into two, left and right" v split-window -h
+      bind -N "Split the pane into two, top and bottom" s split-window -v
     ''}
 
     set -g status-keys ${cfg.keyMode}
@@ -58,36 +58,44 @@ let
 
     ${optionalString
     (cfg.keyMode == "vi" && cfg.customPaneNavigationAndResize) ''
-      bind h select-pane -L
-      bind j select-pane -D
-      bind k select-pane -U
-      bind l select-pane -R
+      bind -N "Select pane to the left of the active pane" h select-pane -L
+      bind -N "Select pane below the active pane" j select-pane -D
+      bind -N "Select pane above the active pane" k select-pane -U
+      bind -N "Select pane to the right of the active pane" l select-pane -R
 
-      bind -r H resize-pane -L ${toString cfg.resizeAmount}
-      bind -r J resize-pane -D ${toString cfg.resizeAmount}
-      bind -r K resize-pane -U ${toString cfg.resizeAmount}
-      bind -r L resize-pane -R ${toString cfg.resizeAmount}
+      bind -r -N "Resize the pane left by ${toString cfg.resizeAmount}" \
+        H resize-pane -L ${toString cfg.resizeAmount}
+      bind -r -N "Resize the pane down by ${toString cfg.resizeAmount}" \
+        J resize-pane -D ${toString cfg.resizeAmount}
+      bind -r -N "Resize the pane up by ${toString cfg.resizeAmount}" \
+        K resize-pane -U ${toString cfg.resizeAmount}
+      bind -r -N "Resize the pane right by ${toString cfg.resizeAmount}" \
+        L resize-pane -R ${toString cfg.resizeAmount}
     ''}
 
     ${if cfg.prefix != null then ''
       # rebind main key: ${cfg.prefix}
       unbind C-${defaultShortcut}
       set -g prefix ${cfg.prefix}
-      bind ${cfg.prefix} send-prefix
+      bind -N "Send the prefix key through to the application" \
+        ${cfg.prefix} send-prefix
     '' else
       optionalString (cfg.shortcut != defaultShortcut) ''
         # rebind main key: C-${cfg.shortcut}
         unbind C-${defaultShortcut}
         set -g prefix C-${cfg.shortcut}
-        bind ${cfg.shortcut} send-prefix
+        bind -N "Send the prefix key through to the application" \
+          ${cfg.shortcut} send-prefix
         bind C-${cfg.shortcut} last-window
       ''}
 
     ${optionalString cfg.disableConfirmationPrompt ''
-      bind-key & kill-window
-      bind-key x kill-pane
+      bind-key -N "Kill the current window" & kill-window
+      bind-key -N "Kill the current pane" x kill-pane
     ''}
 
+    set  -g mouse             ${boolToStr cfg.mouse}
+    set  -g focus-events      ${boolToStr cfg.focusEvents}
     setw -g aggressive-resize ${boolToStr cfg.aggressiveResize}
     setw -g clock-mode-style  ${if cfg.clock24 then "24" else "12"}
     set  -s escape-time       ${toString cfg.escapeTime}
@@ -180,7 +188,16 @@ in {
         default = "";
         description = ''
           Additional configuration to add to
-          <filename>tmux.conf</filename>.
+          {file}`tmux.conf`.
+        '';
+      };
+
+      focusEvents = mkOption {
+        default = false;
+        type = types.bool;
+        description = ''
+          On supported terminals, request focus events and pass them through to
+          applications running in tmux.
         '';
       };
 
@@ -197,6 +214,8 @@ in {
         type = types.enum [ "emacs" "vi" ];
         description = "VI or Emacs style shortcuts.";
       };
+
+      mouse = mkEnableOption "mouse support";
 
       newSession = mkOption {
         default = false;
@@ -230,11 +249,11 @@ in {
 
       sensibleOnTop = mkOption {
         type = types.bool;
-        default = true;
+        default = false;
         description = ''
           Run the sensible plugin at the top of the configuration. It
           is possible to override the sensible settings using the
-          <option>programs.tmux.extraConfig</option> option.
+          {option}`programs.tmux.extraConfig` option.
         '';
       };
 
@@ -274,8 +293,8 @@ in {
         default = pkgs.stdenv.isLinux;
         type = types.bool;
         description = ''
-          Store tmux socket under <filename>/run</filename>, which is more
-          secure than <filename>/tmp</filename>, but as a downside it doesn't
+          Store tmux socket under {file}`/run`, which is more
+          secure than {file}`/tmp`, but as a downside it doesn't
           survive user logout.
         '';
       };
@@ -327,7 +346,7 @@ in {
 
     (mkIf cfg.secureSocket {
       home.sessionVariables = {
-        TMUX_TMPDIR = ''''${XDG_RUNTIME_DIR:-"/run/user/\$(id -u)"}'';
+        TMUX_TMPDIR = ''''${XDG_RUNTIME_DIR:-"/run/user/$(id -u)"}'';
       };
     })
 

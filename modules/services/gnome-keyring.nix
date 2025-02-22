@@ -28,6 +28,14 @@ in {
     assertions = [
       (lib.hm.assertions.assertPlatform "services.gnome-keyring" pkgs
         lib.platforms.linux)
+      {
+        assertion = !config.services.pass-secret-service.enable;
+        message = ''
+          Only one secrets service per user can be enabled at a time.
+          Other services enabled:
+          - pass-secret-service
+        '';
+      }
     ];
 
     systemd.user.services.gnome-keyring = {
@@ -41,7 +49,7 @@ in {
           args = concatStringsSep " " ([ "--start" "--foreground" ]
             ++ optional (cfg.components != [ ])
             ("--components=" + concatStringsSep "," cfg.components));
-        in "${pkgs.gnome.gnome-keyring}/bin/gnome-keyring-daemon ${args}";
+        in "${pkgs.gnome-keyring}/bin/gnome-keyring-daemon ${args}";
         Restart = "on-abort";
       };
 

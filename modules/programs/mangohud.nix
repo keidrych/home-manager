@@ -13,7 +13,7 @@ let
       int = toString option;
       float = int;
       path = int;
-      bool = "false";
+      bool = "0"; # "on/off" opts are disabled with `=0`
       string = option;
       list = concatStringsSep "," (lists.forEach option (x: toString x));
     }.${builtins.typeOf option};
@@ -39,7 +39,7 @@ in {
         type = types.bool;
         default = false;
         description = ''
-          Sets environment variables so that 
+          Sets environment variables so that
           MangoHud is started on any application that supports it.
         '';
       };
@@ -55,8 +55,8 @@ in {
         '';
         description = ''
           Configuration written to
-          <filename>$XDG_CONFIG_HOME/MangoHud/MangoHud.conf</filename>. See
-          <link xlink:href="https://github.com/flightlessmango/MangoHud/blob/master/bin/MangoHud.conf"/>
+          {file}`$XDG_CONFIG_HOME/MangoHud/MangoHud.conf`. See
+          <https://github.com/flightlessmango/MangoHud/blob/master/data/MangoHud.conf>
           for the default configuration.
         '';
       };
@@ -68,14 +68,14 @@ in {
           {
             mpv = {
               no_display = true;
-            }
+            };
           }
         '';
         description = ''
           Sets MangoHud settings per application.
           Configuration written to
-          <filename>$XDG_CONFIG_HOME/MangoHud/{application_name}.conf</filename>. See
-          <link xlink:href="https://github.com/flightlessmango/MangoHud/blob/master/bin/MangoHud.conf"/>
+          {file}`$XDG_CONFIG_HOME/MangoHud/{application_name}.conf`. See
+          <https://github.com/flightlessmango/MangoHud/blob/master/data/MangoHud.conf>
           for the default configuration.
         '';
       };

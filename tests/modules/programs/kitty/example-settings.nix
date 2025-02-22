@@ -1,8 +1,4 @@
-{ config, lib, pkgs, ... }:
-
-with lib;
-
-{
+{ lib, pkgs, ... }: {
   config = {
     programs.kitty = {
       enable = true;
@@ -17,6 +13,7 @@ with lib;
         scrollback_lines = 10000;
         enable_audio_bell = false;
         update_check_interval = 0;
+        background_opacity = 0.5;
       };
 
       font.name = "DejaVu Sans";
@@ -29,8 +26,6 @@ with lib;
 
       environment = { LS_COLORS = "1"; };
     };
-
-    test.stubs.kitty = { };
 
     nmt.script = ''
       assertFileExists home-files/.config/kitty/kitty.conf

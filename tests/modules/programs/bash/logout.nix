@@ -1,26 +1,21 @@
-{ config, lib, pkgs, ... }:
-
-with lib;
-
 {
-  config = {
-    programs.bash = {
-      enable = true;
+  programs.bash = {
+    enable = true;
+    enableCompletion = false;
 
-      logoutExtra = ''
-        clear-console
-      '';
-    };
-
-    nmt.script = ''
-      assertFileExists home-files/.bash_logout
-      assertFileContent \
-        home-files/.bash_logout \
-        ${
-          pkgs.writeShellScript "logout-expected" ''
-            clear-console
-          ''
-        }
+    logoutExtra = ''
+      clear-console
     '';
   };
+
+  nmt.script = ''
+    assertFileExists home-files/.bash_logout
+    assertFileContent \
+      home-files/.bash_logout \
+      ${
+        builtins.toFile "logout-expected" ''
+          clear-console
+        ''
+      }
+  '';
 }

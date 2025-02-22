@@ -1,38 +1,21 @@
-{ config, lib, pkgs, ... }:
+modulePath:
+{ config, lib, ... }:
+let
+  moduleName = lib.concatStringsSep "." modulePath;
 
-with lib;
+  firefoxMockOverlay = import ./setup-firefox-mock-overlay.nix modulePath;
+in {
+  imports = [ firefoxMockOverlay ];
 
-{
-  config = {
-    programs.firefox = {
-      enable = true;
-      enableGnomeExtensions = true;
-    };
-
-    nixpkgs.overlays = [
-      (self: super: {
-        firefox-unwrapped = pkgs.runCommandLocal "firefox-0" {
-          meta.description = "I pretend to be Firefox";
-          passthru.gtk3 = null;
-        } ''
-          mkdir -p "$out"/{bin,lib}
-          touch "$out/bin/firefox"
-          chmod 755 "$out/bin/firefox"
-        '';
-
-        chrome-gnome-shell =
-          pkgs.runCommandLocal "dummy-chrome-gnome-shell" { } ''
-            mkdir -p $out/lib/mozilla/native-messaging-hosts
-            touch $out/lib/mozilla/native-messaging-hosts/dummy
-          '';
-      })
-    ];
-
+  config = lib.mkIf config.test.enableBig (lib.setAttrByPath modulePath {
+    enable = true;
+    enableGnomeExtensions = true;
+  } // {
     test.asserts.warnings.expected = [''
-      Using 'programs.firefox.enableGnomeExtensions' has been deprecated and
+      Using '${moduleName}.enableGnomeExtensions' has been deprecated and
       will be removed in the future. Please change to overriding the package
-      configuration using 'programs.firefox.package' instead. You can refer to
+      configuration using '${moduleName}.package' instead. You can refer to
       its example for how to do this.
     ''];
-  };
+  });
 }

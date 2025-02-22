@@ -28,7 +28,7 @@ let
         description = ''
           Fixed string representation for this tag. The tag can be
           hidden from view, if the key translated is set to
-          <literal>""</literal>, the empty string.
+          `""`, the empty string.
         '';
       };
 
@@ -38,7 +38,7 @@ let
         description = ''
           A pair of strings that define a regular substitution to
           compute the string representation on the fly using
-          <literal>re.sub</literal>.
+          `re.sub`.
         '';
       };
 
@@ -48,7 +48,7 @@ let
         example = "'','', 'white','light red', 'white','#d66'";
         description = ''
           How to display the tag when unfocused.
-          See <link xlink:href="https://alot.readthedocs.io/en/latest/configuration/theming.html#tagstring-formatting"/>.
+          See <https://alot.readthedocs.io/en/latest/configuration/theming.html#tagstring-formatting>.
         '';
       };
 
@@ -68,7 +68,9 @@ let
         realname = realName;
         sendmail_command =
           optionalString (alot.sendMailCommand != null) alot.sendMailCommand;
+      } // optionalAttrs (folders.sent != null) {
         sent_box = "maildir" + "://" + maildir.absPath + "/" + folders.sent;
+      } // optionalAttrs (folders.drafts != null) {
         draft_box = "maildir" + "://" + maildir.absPath + "/" + folders.drafts;
       } // optionalAttrs (aliases != [ ]) {
         aliases = concatStringsSep "," aliases;
@@ -129,6 +131,8 @@ in {
           enabled for each email account that is managed by Notmuch.
         '';
       };
+
+      package = mkPackageOption pkgs "alot" { };
 
       hooks = mkOption {
         type = types.lines;
@@ -227,7 +231,7 @@ in {
   };
 
   config = mkIf cfg.enable {
-    home.packages = [ pkgs.alot ];
+    home.packages = [ cfg.package ];
 
     xdg.configFile."alot/config".text = configFile;
 

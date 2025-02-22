@@ -37,10 +37,13 @@ in {
       defaultText = defaultHieNixExeText;
       description = ''
         The path to the Haskell IDE Engine executable.
-        </para><para>
+
         Because hie-nix is not packaged in Nixpkgs, you need to add it as an
         overlay or set this option. Example overlay configuration:
-        <programlisting language="nix">${exampleOverlay}</programlisting>
+
+        ```nix
+        ${exampleOverlay}
+        ```
       '';
       example = literalExpression ''
         (import ~/src/haskell-ide-engine {}).hies + "/bin/hie-wrapper";
@@ -49,12 +52,12 @@ in {
   };
 
   config = mkIf cfg.enable {
-    programs.vscode.userSettings = mkIf cfg.hie.enable {
+    programs.vscode.profiles.default.userSettings = mkIf cfg.hie.enable {
       "languageServerHaskell.enableHIE" = true;
       "languageServerHaskell.hieExecutablePath" = cfg.hie.executablePath;
     };
 
-    programs.vscode.extensions =
+    programs.vscode.profiles.default.extensions =
       [ pkgs.vscode-extensions.justusadam.language-haskell ]
       ++ lib.optional cfg.hie.enable
       pkgs.vscode-extensions.alanz.vscode-hie-server;

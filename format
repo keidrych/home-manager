@@ -1,36 +1,50 @@
 #! /usr/bin/env nix-shell
-#! nix-shell -I nixpkgs=https://github.com/NixOS/nixpkgs/archive/5edf5b60c3d8f82b5fc5e73e822b6f7460584945.tar.gz -i bash -p findutils nixfmt
+#! nix-shell -I nixpkgs=https://github.com/NixOS/nixpkgs/archive/6616de389ed55fba6eeba60377fc04732d5a207c.tar.gz -i bash -p git gnugrep gnused findutils nixfmt
 
-CHECK_ARG=
+# Avoid being affected by system and user git config.
+export GIT_CONFIG_NOSYSTEM=1
+export HOME=
+export XDG_CONFIG_HOME=
 
-case $1 in
-    -h)
-        echo "$0 [-c]"
-        ;;
-    -c)
-        CHECK_ARG=-c
-        ;;
-esac
+nixfmt_args=()
+files=()
+
+for arg do
+    case $arg in
+        -h)
+            echo "$0 [-c]"
+            exit
+            ;;
+        -c)
+            nixfmt_args+=("$arg")
+            ;;
+        -*)
+            echo "unrecognised flag: $arg" >&2
+            exit 1
+            ;;
+        *)
+            files+=("$arg")
+            ;;
+    esac
+done
 
 # The excludes are for files touched by open pull requests and we want
 # to avoid merge conflicts.
-find . -name '*.nix' \
-  ! -path ./home-manager/home-manager.nix \
-  ! -path ./modules/default.nix \
-  ! -path ./modules/files.nix \
-  ! -path ./modules/home-environment.nix \
-  ! -path ./modules/lib/default.nix \
-  ! -path ./modules/lib/file-type.nix \
-  ! -path ./modules/manual.nix \
-  ! -path ./modules/misc/news.nix \
-  ! -path ./modules/programs/bash.nix \
-  ! -path ./modules/programs/gpg.nix \
-  ! -path ./modules/programs/ssh.nix \
-  ! -path ./modules/programs/zsh.nix \
-  ! -path ./modules/services/gpg-agent.nix \
-  ! -path ./modules/services/mpd.nix \
-  ! -path ./nix-darwin/default.nix \
-  ! -path ./tests/default.nix \
-  ! -path ./tests/modules/home-environment/session-variables.nix \
-  ! -path ./tests/modules/programs/gpg/override-defaults.nix \
-  -exec nixfmt $CHECK_ARG {} +
+excludes=(
+    modules/files.nix
+    modules/home-environment.nix
+    modules/programs/zsh.nix
+)
+
+exclude_args=()
+for e in "${excludes[@]}"; do
+    exclude_args+=(-e "$e")
+done
+
+git_root=$(git rev-parse --show-toplevel)
+
+git ls-files -z --cached --others --full-name -- "${files[@]}" |
+    grep -z '\.nix$' |
+    grep -z -v "${exclude_args[@]}" |
+    sed -z "s|^|$git_root/|" |
+    xargs -0 nixfmt "${nixfmt_args[@]}"

@@ -24,7 +24,7 @@ let
     max-items ${toString cfg.maxItems}
     browser ${cfg.browser}
     reload-threads ${toString cfg.reloadThreads}
-    auto-reload ${if cfg.autoReload then "yes" else "no"}
+    auto-reload ${lib.hm.booleans.yesNo cfg.autoReload}
     ${optionalString (cfg.reloadTime != null)
     (toString "reload-time ${toString cfg.reloadTime}")}
     prepopulate-query-feeds yes
@@ -68,7 +68,10 @@ in {
           url = "http://example.com";
           tags = [ "foo" "bar" ];
         }];
-        description = "List of news feeds.";
+        description = ''
+          List of news feeds. Leave it empty if you want to manage feeds
+          imperatively, for example, using Syncthing.
+        '';
       };
 
       maxItems = mkOption {
@@ -121,16 +124,24 @@ in {
   };
 
   config = mkIf cfg.enable {
+    assertions = [{
+      assertion = cfg.queries != { } -> cfg.urls != [ ];
+      message = ''
+        Cannot specify queries if urls is empty. Unset queries if you
+        want to manage urls imperatively.
+      '';
+    }];
+
     home.packages = [ pkgs.newsboat ];
 
     # Use ~/.newsboat on stateVersion < 21.05 and use ~/.config/newsboat for
     # stateVersion >= 21.05.
     home.file = mkIf (versionOlder config.home.stateVersion "21.05") {
-      ".newsboat/urls".text = urlsFileContents;
+      ".newsboat/urls" = mkIf (cfg.urls != [ ]) { text = urlsFileContents; };
       ".newsboat/config".text = configFileContents;
     };
     xdg.configFile = mkIf (versionAtLeast config.home.stateVersion "21.05") {
-      "newsboat/urls".text = urlsFileContents;
+      "newsboat/urls" = mkIf (cfg.urls != [ ]) { text = urlsFileContents; };
       "newsboat/config".text = configFileContents;
     };
   };

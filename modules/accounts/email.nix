@@ -11,7 +11,7 @@ let
       key = mkOption {
         type = types.str;
         description = ''
-          The key to use as listed in <command>gpg --list-keys</command>.
+          The key to use as listed in {command}`gpg --list-keys`.
         '';
       };
 
@@ -42,6 +42,28 @@ let
         description = ''
           Signature content.
         '';
+      };
+
+      delimiter = mkOption {
+        type = types.str;
+        default = ''
+          --
+        '';
+        example = literalExpression ''
+          ~*~*~*~*~*~*~*~*~*~*~*~
+        '';
+        description = ''
+          The delimiter used between the document and the signature.
+        '';
+      };
+
+      command = mkOption {
+        type = with types; nullOr path;
+        default = null;
+        example = literalExpression ''
+          pkgs.writeScript "signature" "echo This is my signature"
+        '';
+        description = "A command that generates a signature.";
       };
 
       showSignature = mkOption {
@@ -77,7 +99,7 @@ let
         description = ''
           Path to file containing certificate authorities that should
           be used to validate the connection authenticity. If
-          <literal>null</literal> then the system default is used.
+          `null` then the system default is used.
           Note, if set then the system default may still be accepted.
         '';
       };
@@ -100,7 +122,7 @@ let
         example = 993;
         description = ''
           The port on which the IMAP server listens. If
-          <literal>null</literal> then the default port is used.
+          `null` then the default port is used.
         '';
       };
 
@@ -109,6 +131,36 @@ let
         default = { };
         description = ''
           Configuration for secure connections.
+        '';
+      };
+    };
+  };
+
+  jmapModule = types.submodule {
+    options = {
+      host = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        example = "jmap.example.org";
+        description = ''
+          Hostname of JMAP server.
+
+          If both this option and [](#opt-accounts.email.accounts._name_.jmap.sessionUrl) are specified,
+          `host` is preferred by applications when establishing a
+          session.
+        '';
+      };
+
+      sessionUrl = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        example = "https://jmap.example.org:443/.well-known/jmap";
+        description = ''
+          URL for the JMAP Session resource.
+
+          If both this option and [](#opt-accounts.email.accounts._name_.jmap.host) are specified,
+          `host` is preferred by applications when establishing a
+          session.
         '';
       };
     };
@@ -130,7 +182,7 @@ let
         example = 465;
         description = ''
           The port on which the SMTP server listens. If
-          <literal>null</literal> then the default port is used.
+          `null` then the default port is used.
         '';
       };
 
@@ -188,15 +240,23 @@ let
       };
 
       flavor = mkOption {
-        type = types.enum [ "plain" "gmail.com" "runbox.com" "fastmail.com" ];
+        type = types.enum [
+          "plain"
+          "gmail.com"
+          "runbox.com"
+          "fastmail.com"
+          "yandex.com"
+          "outlook.office365.com"
+          "migadu.com"
+        ];
         default = "plain";
         description = ''
           Some email providers have peculiar behavior that require
           special treatment. This option is therefore intended to
           indicate the nature of the provider.
-          </para><para>
+
           When this indicates a specific provider then, for example,
-          the IMAP and SMTP server configuration may be set
+          the IMAP, SMTP, and JMAP server configuration may be set
           automatically.
         '';
       };
@@ -208,10 +268,26 @@ let
       };
 
       aliases = mkOption {
-        type = types.listOf (types.strMatching ".*@.*");
+        description = "Alternative identities of this account.";
         default = [ ];
         example = [ "webmaster@example.org" "admin@example.org" ];
-        description = "Alternative email addresses of this account.";
+        type = types.listOf (types.oneOf [
+          (types.strMatching ".*@.*")
+          (types.submodule {
+            options = {
+              realName = mkOption {
+                type = types.str;
+                example = "Jane Doe";
+                description = "Name displayed when sending mails.";
+              };
+              address = mkOption {
+                type = types.strMatching ".*@.*";
+                example = "jane.doe@example.org";
+                description = "The email address of this identity.";
+              };
+            };
+          })
+        ]);
       };
 
       realName = mkOption {
@@ -225,7 +301,7 @@ let
         default = null;
         description = ''
           The server username of this account. This will be used as
-          the SMTP and IMAP user name.
+          the SMTP, IMAP, and JMAP user name.
         '';
       };
 
@@ -260,7 +336,7 @@ let
             };
 
             drafts = mkOption {
-              type = types.str;
+              type = types.nullOr types.str;
               default = "Drafts";
               description = ''
                 Relative path of the drafts mail folder.
@@ -287,6 +363,14 @@ let
         default = null;
         description = ''
           The IMAP configuration to use for this account.
+        '';
+      };
+
+      jmap = mkOption {
+        type = types.nullOr jmapModule;
+        default = null;
+        description = ''
+          The JMAP configuration to use for this account.
         '';
       };
 
@@ -328,17 +412,75 @@ let
         name = name;
         maildir = mkOptionDefault { path = "${name}"; };
       }
+
+      (mkIf (config.flavor == "yandex.com") {
+        userName = mkDefault config.address;
+
+        imap = {
+          host = "imap.yandex.com";
+          port = 993;
+          tls.enable = true;
+        };
+
+        smtp = {
+          host = "smtp.yandex.com";
+          port = 465;
+          tls.enable = true;
+        };
+      })
+
+      (mkIf (config.flavor == "outlook.office365.com") {
+        userName = mkDefault config.address;
+
+        imap = {
+          host = "outlook.office365.com";
+          port = 993;
+          tls.enable = true;
+        };
+
+        smtp = {
+          host = "smtp.office365.com";
+          port = 587;
+          tls = {
+            enable = true;
+            useStartTls = true;
+          };
+        };
+      })
+
       (mkIf (config.flavor == "fastmail.com") {
         userName = mkDefault config.address;
-        smtp = {
-          host = "smtp.fastmail.com";
-          port = if config.smtp.tls.useStartTls then 587 else 465;
-        };
+
         imap = {
           host = "imap.fastmail.com";
           port = 993;
         };
+
+        smtp = {
+          host = "smtp.fastmail.com";
+          port = if config.smtp.tls.useStartTls then 587 else 465;
+        };
+
+        jmap = {
+          host = "fastmail.com";
+          sessionUrl = "https://jmap.fastmail.com/.well-known/jmap";
+        };
       })
+
+      (mkIf (config.flavor == "migadu.com") {
+        userName = mkDefault config.address;
+
+        imap = {
+          host = "imap.migadu.com";
+          port = 993;
+        };
+
+        smtp = {
+          host = "smtp.migadu.com";
+          port = 465;
+        };
+      })
+
       (mkIf (config.flavor == "gmail.com") {
         userName = mkDefault config.address;
 
@@ -354,9 +496,15 @@ let
       })
 
       (mkIf (config.flavor == "runbox.com") {
-        imap = { host = "mail.runbox.com"; };
+        imap = {
+          host = "mail.runbox.com";
+          port = 993;
+        };
 
-        smtp = { host = "mail.runbox.com"; };
+        smtp = {
+          host = "mail.runbox.com";
+          port = if config.smtp.tls.useStartTls then 587 else 465;
+        };
       })
     ];
   };
@@ -376,13 +524,14 @@ in {
     maildirBasePath = mkOption {
       type = types.str;
       default = "${config.home.homeDirectory}/Maildir";
-      defaultText = "$HOME/Maildir";
+      defaultText = "Maildir";
       apply = p:
         if hasPrefix "/" p then p else "${config.home.homeDirectory}/${p}";
       description = ''
         The base directory for account maildir directories. May be a
-        relative path, in which case it is relative the home
-        directory.
+        relative path (e.g. the user setting this value as "MyMaildir"),
+        in which case it is relative the home directory (e.g. resulting
+        in "~/MyMaildir").
       '';
     };
 

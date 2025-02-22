@@ -28,13 +28,15 @@ in {
       defaultText = literalExpression "{ }";
       example = literalExpression ''
         {
-          assume_yes = true;
-          disable = [
-            "flutter"
-            "node"
-          ];
-          set_title = false;
-          cleanup = true;
+          misc = {
+            assume_yes = true;
+            disable = [
+              "flutter"
+              "node"
+            ];
+            set_title = false;
+            cleanup = true;
+          };
           commands = {
             "Run garbage collection on Nix store" = "nix-collect-garbage";
           };
@@ -42,9 +44,9 @@ in {
       '';
       description = ''
         Configuration written to
-        <filename>$XDG_CONFIG_HOME/topgrade.toml</filename>.
-        </para><para>
-        See <link xlink:href="https://github.com/r-darwish/topgrade/wiki/Step-list" /> for the full list
+        {file}`$XDG_CONFIG_HOME/topgrade.toml`.
+
+        See <https://github.com/r-darwish/topgrade/wiki/Step-list> for the full list
         of options.
       '';
     };

@@ -1,18 +1,15 @@
-{ config, lib, pkgs, ... }:
-
-with lib;
-
+{ lib, pkgs, ... }:
 let
 
   func = pkgs.writeText "func.fish" ''
     function func
-      echo "Hello"
+        echo Hello
     end
   '';
 
   funcEvent = pkgs.writeText "func-event.fish" ''
     function func-event --on-event="fish_command_not_found"
-      echo "Not found!"
+        echo "Not found!"
     end
   '';
 
@@ -33,8 +30,6 @@ in {
     # Needed to avoid error with dummy fish package.
     xdg.dataFile."fish/home-manager_generated_completions".source =
       lib.mkForce (builtins.toFile "empty" "");
-
-    test.stubs.fish = { };
 
     nmt = {
       description =

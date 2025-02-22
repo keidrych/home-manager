@@ -3,6 +3,7 @@
 with lib;
 
 let
+  inherit (pkgs.stdenv.hostPlatform) isDarwin;
 
   cfg = config.programs.htop;
 
@@ -41,6 +42,8 @@ let
     TIME = 49;
     NLWP = 50;
     TGID = 51;
+    PERCENT_NORM_CPU = 52;
+    ELAPSED = 53;
     CMINFLT = 10;
     CMAJFLT = 12;
     UTIME = 13;
@@ -73,6 +76,21 @@ let
     M_PSSWP = 120;
   };
 
+  defaultFields = with fields; [
+    PID
+    USER
+    PRIORITY
+    NICE
+    M_SIZE
+    M_RESIDENT
+    M_SHARE
+    STATE
+    PERCENT_CPU
+    PERCENT_MEM
+    TIME
+    COMM
+  ];
+
   modes = {
     Bar = 1;
     Text = 2;
@@ -89,13 +107,14 @@ let
   blank = text "Blank";
 
 in {
-  meta.maintainers = [ maintainers.bjpbakker ];
+  meta.maintainers = [ hm.maintainers.bjpbakker ];
 
   options.programs.htop = {
     enable = mkEnableOption "htop";
 
     settings = mkOption {
-      type = types.attrs;
+      type = with types;
+        attrsOf (oneOf [ bool int str (listOf (oneOf [ int str ])) ]);
       default = { };
       example = literalExpression ''
         {
@@ -133,7 +152,7 @@ in {
       '';
       description = ''
         Configuration options to add to
-        <filename>$XDG_CONFIG_HOME/htop/htoprc</filename>.
+        {file}`$XDG_CONFIG_HOME/htop/htoprc`.
       '';
     };
 
@@ -141,33 +160,24 @@ in {
       type = types.package;
       default = pkgs.htop;
       defaultText = literalExpression "pkgs.htop";
-      description = "Package containing the <command>htop</command> program.";
+      description = "Package containing the {command}`htop` program.";
     };
   };
 
   config = mkIf cfg.enable {
     lib.htop = {
-      inherit fields modes leftMeters rightMeters bar text graph led blank;
+      inherit fields defaultFields modes leftMeters rightMeters bar text graph
+        led blank;
     };
 
     home.packages = [ cfg.package ];
 
-    xdg.configFile."htop/htoprc" = let
+    xdg.configFile."htop" = let
       defaults = {
-        fields = with fields; [
-          PID
-          USER
-          PRIORITY
-          NICE
-          M_SIZE
-          M_RESIDENT
-          M_SHARE
-          STATE
-          PERCENT_CPU
-          PERCENT_MEM
-          TIME
-          COMM
-        ];
+        fields = if isDarwin then
+          remove fields.M_SHARE defaultFields
+        else
+          defaultFields;
       };
 
       before = optionalAttrs (cfg.settings ? header_layout) {
@@ -179,9 +189,9 @@ in {
       formatOptions = mapAttrsToList formatOption;
 
     in mkIf (cfg.settings != { }) {
-      text =
-        concatStringsSep "\n" (formatOptions before ++ formatOptions settings)
-        + "\n";
+      source = pkgs.writeTextDir "htoprc"
+        (concatStringsSep "\n" (formatOptions before ++ formatOptions settings)
+          + "\n");
     };
   };
 }

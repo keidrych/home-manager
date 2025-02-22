@@ -24,6 +24,8 @@ let
   formatPair = key: value:
     if isAttrs value then formatSet key value else formatLine key value;
 
+  homeConf = "${config.xdg.configHome}/task/home-manager-taskrc";
+  userConf = "${config.xdg.configHome}/task/taskrc";
 in {
   options = {
     programs.taskwarrior = {
@@ -49,7 +51,7 @@ in {
         '';
         description = ''
           Key-value configuration written to
-          <filename>$XDG_CONFIG_HOME/task/taskrc</filename>.
+          {file}`$XDG_CONFIG_HOME/task/taskrc`.
         '';
       };
 
@@ -59,7 +61,7 @@ in {
         defaultText = "$XDG_DATA_HOME/task";
         description = ''
           Location where Task Warrior will store its data.
-          </para><para>
+
           Home Manager will attempt to create this directory.
         '';
       };
@@ -79,16 +81,19 @@ in {
         default = "";
         description = ''
           Additional content written at the end of
-          <filename>$XDG_CONFIG_HOME/task/taskrc</filename>.
+          {file}`$XDG_CONFIG_HOME/task/taskrc`.
         '';
       };
+
+      package =
+        mkPackageOption pkgs "taskwarrior" { example = "pkgs.taskwarrior3"; };
     };
   };
 
   config = mkIf cfg.enable {
-    home.packages = [ pkgs.taskwarrior ];
+    home.packages = [ cfg.package ];
 
-    xdg.configFile."task/taskrc".text = ''
+    home.file."${homeConf}".text = ''
       data.location=${cfg.dataLocation}
       ${optionalString (cfg.colorTheme != null) (if isString cfg.colorTheme then
         "include ${cfg.colorTheme}.theme"
@@ -98,6 +103,22 @@ in {
       ${concatStringsSep "\n" (mapAttrsToList formatPair cfg.config)}
 
       ${cfg.extraConfig}
+    '';
+
+    home.activation.regenDotTaskRc = hm.dag.entryAfter [ "writeBoundary" ] ''
+      verboseEcho "Ensuring generated taskwarrior config included in taskrc"
+
+      if [[ ! -s "${userConf}" ]]; then
+        # Ensure file's existence
+        if [[ -v DRY_RUN ]]; then
+          run echo "include ${homeConf}" ">" "${userConf}"
+        else
+          echo "include ${homeConf}" > "${userConf}"
+        fi
+      elif ! grep -qF "include ${homeConf}" ${escapeShellArg userConf}; then
+        # Add include statement for Home Manager generated config.
+        run sed -i '1i include ${homeConf}' ${escapeShellArg userConf}
+      fi
     '';
   };
 }

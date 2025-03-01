@@ -2,7 +2,8 @@
 
 let
   inherit (lib)
-    all filterAttrs hasAttr isStorePath literalExpression optionalAttrs types;
+    all filterAttrs hasAttr isStorePath literalExpression optional optionalAttrs
+    types;
   inherit (lib.options) mkEnableOption mkOption;
   inherit (lib.modules) mkIf mkMerge;
 
@@ -24,11 +25,11 @@ let
 
       options = {
         layer = mkOption {
-          type = nullOr (enum [ "top" "bottom" ]);
+          type = nullOr (enum [ "top" "bottom" "overlay" ]);
           default = null;
           description = ''
-            Decide if the bar is displayed in front (<code>"top"</code>)
-            of the windows or behind (<code>"bottom"</code>).
+            Decide if the bar is displayed in front (`"top"`)
+            of the windows or behind (`"bottom"`).
           '';
           example = "top";
         };
@@ -69,8 +70,8 @@ let
         };
 
         modules-left = mkOption {
-          type = listOf str;
-          default = [ ];
+          type = nullOr (listOf str);
+          default = null;
           description = "Modules that will be displayed on the left.";
           example = literalExpression ''
             [ "sway/workspaces" "sway/mode" "wlr/taskbar" ]
@@ -78,8 +79,8 @@ let
         };
 
         modules-center = mkOption {
-          type = listOf str;
-          default = [ ];
+          type = nullOr (listOf str);
+          default = null;
           description = "Modules that will be displayed in the center.";
           example = literalExpression ''
             [ "sway/window" ]
@@ -87,8 +88,8 @@ let
         };
 
         modules-right = mkOption {
-          type = listOf str;
-          default = [ ];
+          type = nullOr (listOf str);
+          default = null;
           description = "Modules that will be displayed on the right.";
           example = literalExpression ''
             [ "mpd" "custom/mymodule#with-css-id" "temperature" ]
@@ -97,7 +98,8 @@ let
 
         modules = mkOption {
           type = jsonFormat.type;
-          default = { };
+          visible = false;
+          default = null;
           description = "Modules configuration.";
           example = literalExpression ''
             {
@@ -141,7 +143,7 @@ let
       };
     };
 in {
-  meta.maintainers = with lib.maintainers; [ berbiche ];
+  meta.maintainers = with lib.maintainers; [ berbiche khaneliman ];
 
   options.programs.waybar = with lib.types; {
     enable = mkEnableOption "Waybar";
@@ -151,7 +153,7 @@ in {
       default = pkgs.waybar;
       defaultText = literalExpression "pkgs.waybar";
       description = ''
-        Waybar package to use. Set to <code>null</code> to use the default package.
+        Waybar package to use. Set to `null` to use the default package.
       '';
     };
 
@@ -159,8 +161,7 @@ in {
       type = either (listOf waybarBarConfig) (attrsOf waybarBarConfig);
       default = [ ];
       description = ''
-        Configuration for Waybar, see <link
-          xlink:href="https://github.com/Alexays/Waybar/wiki/Configuration"/>
+        Configuration for Waybar, see <https://github.com/Alexays/Waybar/wiki/Configuration>
         for supported values.
       '';
       example = literalExpression ''
@@ -176,19 +177,18 @@ in {
             modules-left = [ "sway/workspaces" "sway/mode" "wlr/taskbar" ];
             modules-center = [ "sway/window" "custom/hello-from-waybar" ];
             modules-right = [ "mpd" "custom/mymodule#with-css-id" "temperature" ];
-            modules = {
-              "sway/workspaces" = {
-                disable-scroll = true;
-                all-outputs = true;
-              };
-              "custom/hello-from-waybar" = {
-                format = "hello {}";
-                max-length = 40;
-                interval = "once";
-                exec = pkgs.writeShellScript "hello-from-waybar" '''
-                  echo "from within waybar"
-                ''';
-              };
+
+            "sway/workspaces" = {
+              disable-scroll = true;
+              all-outputs = true;
+            };
+            "custom/hello-from-waybar" = {
+              format = "hello {}";
+              max-length = 40;
+              interval = "once";
+              exec = pkgs.writeShellScript "hello-from-waybar" '''
+                echo "from within waybar"
+              ''';
             };
           };
         }
@@ -198,30 +198,39 @@ in {
     systemd.enable = mkEnableOption "Waybar systemd integration";
 
     systemd.target = mkOption {
-      type = str;
-      default = "graphical-session.target";
+      type = nullOr str;
+      default = config.wayland.systemd.target;
+      defaultText = literalExpression "config.wayland.systemd.target";
       example = "sway-session.target";
       description = ''
         The systemd target that will automatically start the Waybar service.
-        </para>
-        <para>
-        When setting this value to <literal>"sway-session.target"</literal>,
-        make sure to also enable <option>wayland.windowManager.sway.systemdIntegration</option>,
+
+        When setting this value to `"sway-session.target"`,
+        make sure to also enable {option}`wayland.windowManager.sway.systemd.enable`,
         otherwise the service may never be started.
       '';
     };
 
+    systemd.enableInspect = mkOption {
+      type = bool;
+      default = false;
+      example = true;
+      description = ''
+        Inspect objects and find their CSS classes, experiment with live CSS styles, and lookup the current value of CSS properties.
+
+        See <https://developer.gnome.org/documentation/tools/inspector.html>
+      '';
+    };
+
     style = mkOption {
-      type = nullOr (either path str);
+      type = nullOr (either path lines);
       default = null;
       description = ''
         CSS style of the bar.
-        </para>
-        <para>
-        See <link xlink:href="https://github.com/Alexays/Waybar/wiki/Configuration"/>
+
+        See <https://github.com/Alexays/Waybar/wiki/Configuration>
         for the documentation.
-        </para>
-        <para>
+
         If the value is set to a path literal, then the path will be used as the css file.
       '';
       example = ''
@@ -244,7 +253,7 @@ in {
   config = let
     # Removes nulls because Waybar ignores them.
     # This is not recursive.
-    removeNulls = filterAttrs (_: v: v != null);
+    removeTopLevelNulls = filterAttrs (_: v: v != null);
 
     # Makes the actual valid configuration Waybar accepts
     # (strips our custom settings before converting to JSON)
@@ -254,8 +263,8 @@ in {
         # as its descendants have to live at the top-level
         settingsWithoutModules = removeAttrs configuration [ "modules" ];
         settingsModules =
-          optionalAttrs (configuration.modules != { }) configuration.modules;
-      in removeNulls (settingsWithoutModules // settingsModules);
+          optionalAttrs (configuration.modules != null) configuration.modules;
+      in removeTopLevelNulls (settingsWithoutModules // settingsModules);
 
     # Allow using attrs for settings instead of a list in order to more easily override
     settings = if builtins.isAttrs cfg.settings then
@@ -276,7 +285,7 @@ in {
         ({
           assertion =
             if lib.versionAtLeast config.home.stateVersion "22.05" then
-              all (x: !hasAttr "modules" x) settings
+              all (x: !hasAttr "modules" x || x.modules == null) settings
             else
               true;
           message = ''
@@ -312,18 +321,26 @@ in {
           Description =
             "Highly customizable Wayland bar for Sway and Wlroots based compositors.";
           Documentation = "https://github.com/Alexays/Waybar/wiki";
-          PartOf = [ "graphical-session.target" ];
-          After = [ "graphical-session.target" ];
+          PartOf = [ cfg.systemd.target ];
+          After = [ cfg.systemd.target ];
+          ConditionEnvironment = "WAYLAND_DISPLAY";
+          X-Restart-Triggers = optional (settings != [ ])
+            "${config.xdg.configFile."waybar/config".source}"
+            ++ optional (cfg.style != null)
+            "${config.xdg.configFile."waybar/style.css".source}";
         };
 
         Service = {
           ExecStart = "${cfg.package}/bin/waybar";
-          ExecReload = "kill -SIGUSR2 $MAINPID";
+          ExecReload = "${pkgs.coreutils}/bin/kill -SIGUSR2 $MAINPID";
           Restart = "on-failure";
           KillMode = "mixed";
+        } // optionalAttrs cfg.systemd.enableInspect {
+          Environment = [ "GTK_DEBUG=interactive" ];
         };
 
-        Install = { WantedBy = [ cfg.systemd.target ]; };
+        Install.WantedBy =
+          lib.optional (cfg.systemd.target != null) cfg.systemd.target;
       };
     })
   ]);

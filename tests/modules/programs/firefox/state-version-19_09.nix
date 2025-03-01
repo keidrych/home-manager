@@ -1,31 +1,19 @@
-{ config, lib, pkgs, ... }:
+modulePath:
+{ config, lib, ... }:
+let
+  cfg = lib.getAttrFromPath modulePath config;
 
-with lib;
+  firefoxMockOverlay = import ./setup-firefox-mock-overlay.nix modulePath;
+in {
+  imports = [ firefoxMockOverlay ];
 
-{
-  config = {
+  config = lib.mkIf config.test.enableBig ({
     home.stateVersion = "19.09";
-
-    programs.firefox.enable = true;
-
-    nixpkgs.overlays = [
-      (self: super: {
-        firefox-unwrapped = pkgs.runCommand "firefox-0" {
-          meta.description = "I pretend to be Firefox";
-          preferLocalBuild = true;
-          passthru.gtk3 = null;
-        } ''
-          mkdir -p "$out"/{bin,lib}
-          touch "$out/bin/firefox"
-          chmod 755 "$out/bin/firefox"
-        '';
-      })
-    ];
-
+  } // lib.setAttrByPath modulePath { enable = true; } // {
     nmt.script = ''
       assertFileRegex \
-        home-path/bin/firefox \
+        home-path/bin/${cfg.wrappedPackageName} \
         MOZ_APP_LAUNCHER
     '';
-  };
+  });
 }

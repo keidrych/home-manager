@@ -9,7 +9,7 @@ let
   settingsFormat = pkgs.formats.toml { };
 
 in {
-  meta.maintainers = [ maintainers.farlion ];
+  meta.maintainers = with lib.maintainers; [ farlion thiagokokada ];
 
   options.programs.i3status-rust = {
     enable = mkEnableOption "a replacement for i3-status written in Rust";
@@ -21,42 +21,38 @@ in {
           blocks = mkOption {
             type = settingsFormat.type;
             default = [
+              { block = "cpu"; }
               {
                 block = "disk_space";
                 path = "/";
-                alias = "/";
                 info_type = "available";
-                unit = "GB";
-                interval = 60;
+                interval = 20;
                 warning = 20.0;
                 alert = 10.0;
+                format = " $icon root: $available.eng(w:2) ";
               }
               {
                 block = "memory";
-                display_type = "memory";
-                format_mem = "{mem_used_percents}";
-                format_swap = "{swap_used_percents}";
+                format = " $icon $mem_total_used_percents.eng(w:2) ";
+                format_alt = " $icon_swap $swap_used_percents.eng(w:2) ";
               }
               {
-                block = "cpu";
-                interval = 1;
+                block = "sound";
+                click = [{
+                  button = "left";
+                  cmd = "pavucontrol";
+                }];
               }
-              {
-                block = "load";
-                interval = 1;
-                format = "{1m}";
-              }
-              { block = "sound"; }
               {
                 block = "time";
-                interval = 60;
-                format = "%a %d/%m %R";
+                interval = 5;
+                format = " $timestamp.datetime(f:'%a %d/%m %R') ";
               }
             ];
             description = ''
               Configuration blocks to add to i3status-rust
-              <filename>config</filename>. See
-              <link xlink:href="https://github.com/greshake/i3status-rust/blob/master/blocks.md"/>
+              {file}`config`. See
+              <https://github.com/greshake/i3status-rust/blob/master/blocks.md>
               for block options.
             '';
             example = literalExpression ''
@@ -64,20 +60,23 @@ in {
                 {
                   block = "disk_space";
                   path = "/";
-                  alias = "/";
                   info_type = "available";
-                  unit = "GB";
                   interval = 60;
                   warning = 20.0;
                   alert = 10.0;
                 }
                 {
                   block = "sound";
-                  format = "{output_name} {volume}%";
-                  on_click = "pavucontrol --tab=3";
+                  format = " $icon $output_name {$volume.eng(w:2) |}";
+                  click = [
+                    {
+                      button = "left";
+                      cmd = "pavucontrol --tab=3";
+                    }
+                  ];
                   mappings = {
-                   "alsa_output.pci-0000_00_1f.3.analog-stereo" = "";
-                   "bluez_sink.70_26_05_DA_27_A4.a2dp_sink" = "";
+                    "alsa_output.pci-0000_00_1f.3.analog-stereo" = "";
+                    "bluez_sink.70_26_05_DA_27_A4.a2dp_sink" = "";
                   };
                 }
               ];
@@ -89,12 +88,12 @@ in {
             default = { };
             description = ''
               Any extra options to add to i3status-rust
-              <filename>config</filename>.
+              {file}`config`.
             '';
             example = literalExpression ''
               {
                 theme =  {
-                  name = "solarized-dark";
+                  theme = "solarized-dark";
                   overrides = {
                     idle_bg = "#123456";
                     idle_fg = "#abcdef";
@@ -109,10 +108,10 @@ in {
             default = "none";
             description = ''
               The icons set to use. See
-              <link xlink:href="https://github.com/greshake/i3status-rust/blob/master/themes.md"/>
+              <https://github.com/greshake/i3status-rust/blob/master/doc/themes.md>
               for a list of available icon sets.
             '';
-            example = "awesome5";
+            example = "awesome6";
           };
 
           theme = mkOption {
@@ -120,7 +119,7 @@ in {
             default = "plain";
             description = ''
               The theme to use. See
-              <link xlink:href="https://github.com/greshake/i3status-rust/blob/master/themes.md"/>
+              <https://github.com/greshake/i3status-rust/blob/master/doc/themes.md>
               for a list of available themes.
             '';
             example = "gruvbox-dark";
@@ -134,18 +133,15 @@ in {
             {
               block = "disk_space";
               path = "/";
-              alias = "/";
               info_type = "available";
-              unit = "GB";
               interval = 60;
               warning = 20.0;
               alert = 10.0;
             }
             {
               block = "memory";
-              display_type = "memory";
-              format_mem = "{Mup}%";
-              format_swap = "{SUp}%";
+              format = " $icon mem_used_percents ";
+              format_alt = " $icon $swap_used_percents ";
             }
             {
               block = "cpu";
@@ -154,31 +150,28 @@ in {
             {
               block = "load";
               interval = 1;
-              format = "{1m}";
+              format = " $icon $1m ";
             }
             { block = "sound"; }
             {
               block = "time";
               interval = 60;
-              format = "%a %d/%m %R";
+              format = " $timestamp.datetime(f:'%a %d/%m %R') ";
             }
           ];
         };
       };
       description = ''
         Attribute set of i3status-rust bars, each with their own configuration.
-        Each bar <varname>name</varname> generates a config file suffixed with
-        the bar's <varname>name</varname> from the attribute set, like so:
-        <filename>config-<replaceable>name</replaceable>.toml</filename>.
-        </para><para>
+        Each bar {var}`name` generates a config file suffixed with
+        the bar's {var}`name` from the attribute set, like so:
+        {file}`config-''${name}.toml`.
+
         This way, multiple config files can be generated, such as for having a
         top and a bottom bar.
-        </para><para>
+
         See
-        <citerefentry>
-         <refentrytitle>i3status-rust</refentrytitle>
-         <manvolnum>1</manvolnum>
-        </citerefentry>
+        {manpage}`i3status-rust(1)`
         for options.
       '';
       example = literalExpression ''
@@ -187,18 +180,15 @@ in {
             {
                block = "disk_space";
                path = "/";
-               alias = "/";
                info_type = "available";
-               unit = "GB";
                interval = 60;
                warning = 20.0;
                alert = 10.0;
              }
              {
                block = "memory";
-               display_type = "memory";
-               format_mem = "{mem_used_percents}";
-               format_swap = "{swap_used_percents}";
+               format_mem = " $icon $mem_used_percents ";
+               format_swap = " $icon $swap_used_percents ";
              }
              {
                block = "cpu";
@@ -207,18 +197,18 @@ in {
              {
                block = "load";
                interval = 1;
-               format = "{1m}";
+               format = " $icon $1m ";
              }
              { block = "sound"; }
              {
                block = "time";
                interval = 60;
-               format = "%a %d/%m %R";
+               format = " $timestamp.datetime(f:'%a %d/%m %R') ";
              }
           ];
           settings = {
             theme =  {
-              name = "solarized-dark";
+              theme = "solarized-dark";
               overrides = {
                 idle_bg = "#123456";
                 idle_fg = "#abcdef";
@@ -244,24 +234,33 @@ in {
     assertions = [
       (hm.assertions.assertPlatform "programs.i3status-rust" pkgs
         platforms.linux)
+      {
+        assertion = lib.versionOlder cfg.package.version "0.31.0"
+          || lib.versionAtLeast cfg.package.version "0.31.2";
+        message =
+          "Only i3status-rust <0.31.0 or ≥0.31.2 is supported due to a config format incompatibility.";
+      }
     ];
 
     home.packages = [ cfg.package ];
 
-    xdg.configFile = mapAttrs' (cfgFileSuffix: cfg:
+    xdg.configFile = mapAttrs' (cfgFileSuffix: cfgBar:
       nameValuePair ("i3status-rust/config-${cfgFileSuffix}.toml") ({
-        onChange = mkIf config.xsession.windowManager.i3.enable ''
-          i3Socket="''${XDG_RUNTIME_DIR:-/run/user/$UID}/i3/ipc-socket.*"
-          if [[ -S $i3Socket ]]; then
-            ${config.xsession.windowManager.i3.package}/bin/i3-msg -s $i3Socket restart >/dev/null
-          fi
+        onChange = ''
+          ${pkgs.procps}/bin/pkill -u $USER -USR2 i3status-rs || true
         '';
 
         source = settingsFormat.generate ("config-${cfgFileSuffix}.toml") ({
-          theme = cfg.theme;
-          icons = cfg.icons;
-          block = cfg.blocks;
-        } // cfg.settings);
+          theme = if lib.versionAtLeast cfg.package.version "0.30.0" then {
+            theme = cfgBar.theme;
+          } else
+            cfgBar.theme;
+          icons = if lib.versionAtLeast cfg.package.version "0.30.0" then {
+            icons = cfgBar.icons;
+          } else
+            cfgBar.icons;
+          block = cfgBar.blocks;
+        } // cfgBar.settings);
       })) cfg.bars;
   };
 }

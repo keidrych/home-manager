@@ -25,6 +25,13 @@ in {
           The settings to use for XScreenSaver.
         '';
       };
+
+      package = mkOption {
+        type = with types; package;
+        default = pkgs.xscreensaver;
+        defaultText = lib.literalExpression "pkgs.xscreensaver";
+        description = "Which xscreensaver package to use.";
+      };
     };
   };
 
@@ -35,7 +42,7 @@ in {
     ];
 
     # To make the xscreensaver-command tool available.
-    home.packages = [ pkgs.xscreensaver ];
+    home.packages = [ cfg.package ];
 
     xresources.properties =
       mapAttrs' (n: nameValuePair "xscreensaver.${n}") cfg.settings;
@@ -52,7 +59,8 @@ in {
       };
 
       Service = {
-        ExecStart = "${pkgs.xscreensaver}/bin/xscreensaver -no-splash";
+        ExecStart = "${cfg.package}/bin/xscreensaver -no-splash";
+        Environment = [ "PATH=${makeBinPath [ cfg.package ]}" ];
       };
 
       Install = { WantedBy = [ "graphical-session.target" ]; };

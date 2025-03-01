@@ -12,6 +12,8 @@ let
         if isBool v then (if v then "true" else "false") else toString v;
     in ''set ${n}	"${formatValue v}"'';
 
+  formatMapLine = n: v: "map ${n}   ${toString v}";
+
 in {
   meta.maintainers = [ maintainers.rprospero ];
 
@@ -29,14 +31,11 @@ in {
 
     options = mkOption {
       default = { };
-      type = with types; attrsOf (either str (either bool int));
+      type = with types; attrsOf (oneOf [ str bool int float ]);
       description = ''
-        Add <option>:set</option> command options to zathura and make
+        Add {option}`:set` command options to zathura and make
         them permanent. See
-        <citerefentry>
-          <refentrytitle>zathurarc</refentrytitle>
-          <manvolnum>5</manvolnum>
-        </citerefentry>
+        {manpage}`zathurarc(5)`
         for the full list of options.
       '';
       example = {
@@ -45,12 +44,31 @@ in {
       };
     };
 
+    mappings = mkOption {
+      default = { };
+      type = with types; attrsOf str;
+      description = ''
+        Add {option}`:map` mappings to zathura and make
+        them permanent. See
+        {manpage}`zathurarc(5)`
+        for the full list of possible mappings.
+
+        You can create a mode-specific mapping by specifying the mode before the key:
+        `"[normal] <C-b>" = "scroll left";`
+      '';
+      example = {
+        D = "toggle_page_mode";
+        "<Right>" = "navigate next";
+        "[fullscreen] <C-i>" = "zoom in";
+      };
+    };
+
     extraConfig = mkOption {
       type = types.lines;
       default = "";
       description = ''
         Additional commands for zathura that will be added to the
-        <filename>zathurarc</filename> file.
+        {file}`zathurarc` file.
       '';
     };
   };
@@ -60,6 +78,7 @@ in {
 
     xdg.configFile."zathura/zathurarc".text = concatStringsSep "\n" ([ ]
       ++ optional (cfg.extraConfig != "") cfg.extraConfig
-      ++ mapAttrsToList formatLine cfg.options) + "\n";
+      ++ mapAttrsToList formatLine cfg.options
+      ++ mapAttrsToList formatMapLine cfg.mappings) + "\n";
   };
 }

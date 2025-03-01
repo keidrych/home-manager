@@ -6,50 +6,6 @@ let
 
   cfg = config.programs.git;
 
-  # create [section "subsection"] keys from "section.subsection" attrset names
-  mkSectionName = name:
-    let
-      containsQuote = strings.hasInfix ''"'' name;
-      sections = splitString "." name;
-      section = head sections;
-      subsections = tail sections;
-      subsection = concatStringsSep "." subsections;
-    in if containsQuote || subsections == [ ] then
-      name
-    else
-      ''${section} "${subsection}"'';
-
-  mkValueString = v:
-    let
-      escapedV = ''
-        "${
-          replaceStrings [ "\n" "	" ''"'' "\\" ] [ "\\n" "\\t" ''\"'' "\\\\" ] v
-        }"'';
-    in generators.mkValueStringDefault { } (if isString v then escapedV else v);
-
-  # generation for multiple ini values
-  mkKeyValue = k: v:
-    let
-      mkKeyValue =
-        generators.mkKeyValueDefault { inherit mkValueString; } " = " k;
-    in concatStringsSep "\n" (map (kv: "	" + mkKeyValue kv) (toList v));
-
-  # converts { a.b.c = 5; } to { "a.b".c = 5; } for toINI
-  gitFlattenAttrs = let
-    recurse = path: value:
-      if isAttrs value then
-        mapAttrsToList (name: value: recurse ([ name ] ++ path) value) value
-      else if length path > 1 then {
-        ${concatStringsSep "." (reverseList (tail path))}.${head path} = value;
-      } else {
-        ${head path} = value;
-      };
-  in attrs: foldl recursiveUpdate { } (flatten (recurse [ ] attrs));
-
-  gitToIni = attrs:
-    let toIni = generators.toINI { inherit mkKeyValue mkSectionName; };
-    in toIni (gitFlattenAttrs attrs);
-
   gitIniType = with types;
     let
       primitiveType = either str (either bool int);
@@ -58,45 +14,15 @@ let
       supersectionType = attrsOf (either multipleType sectionType);
     in attrsOf supersectionType;
 
-  signModule = types.submodule {
-    options = {
-      key = mkOption {
-        type = types.nullOr types.str;
-        description = ''
-          The default GPG signing key fingerprint.
-          </para><para>
-          Set to <literal>null</literal> to let GnuPG decide what signing key
-          to use depending on commit’s author.
-        '';
-      };
-
-      signByDefault = mkOption {
-        type = types.bool;
-        default = false;
-        description = "Whether commits should be signed by default.";
-      };
-
-      gpgPath = mkOption {
-        type = types.str;
-        default = "${pkgs.gnupg}/bin/gpg2";
-        defaultText = "\${pkgs.gnupg}/bin/gpg2";
-        description = "Path to GnuPG binary to use.";
-      };
-    };
-  };
-
   includeModule = types.submodule ({ config, ... }: {
     options = {
       condition = mkOption {
         type = types.nullOr types.str;
         default = null;
         description = ''
-          Include this configuration only when <varname>condition</varname>
+          Include this configuration only when {var}`condition`
           matches. Allowed conditions are described in
-          <citerefentry>
-            <refentrytitle>git-config</refentrytitle>
-            <manvolnum>1</manvolnum>
-          </citerefentry>.
+          {manpage}`git-config(1)`.
         '';
       };
 
@@ -124,20 +50,27 @@ let
           Configuration to include. If empty then a path must be given.
 
           This follows the configuration structure as described in
-          <citerefentry>
-            <refentrytitle>git-config</refentrytitle>
-            <manvolnum>1</manvolnum>
-          </citerefentry>.
+          {manpage}`git-config(1)`.
         '';
       };
-    };
 
-    config.path = mkIf (config.contents != { })
-      (mkDefault (pkgs.writeText "contents" (gitToIni config.contents)));
+      contentSuffix = mkOption {
+        type = types.str;
+        default = "gitconfig";
+        description = ''
+          Nix store name for the git configuration text file,
+          when generating the configuration text from nix options.
+        '';
+
+      };
+    };
+    config.path = mkIf (config.contents != { }) (mkDefault
+      (pkgs.writeText (hm.strings.storeFileName config.contentSuffix)
+        (generators.toGitINI config.contents)));
   });
 
 in {
-  meta.maintainers = [ maintainers.rycee ];
+  meta.maintainers = with lib.maintainers; [ khaneliman rycee ];
 
   options = {
     programs.git = {
@@ -148,8 +81,8 @@ in {
         default = pkgs.git;
         defaultText = literalExpression "pkgs.git";
         description = ''
-          Git package to install. Use <varname>pkgs.gitAndTools.gitFull</varname>
-          to gain access to <command>git send-email</command> for instance.
+          Git package to install. Use {var}`pkgs.gitAndTools.gitFull`
+          to gain access to {command}`git send-email` for instance.
         '';
       };
 
@@ -172,10 +105,40 @@ in {
         description = "Git aliases to define.";
       };
 
-      signing = mkOption {
-        type = types.nullOr signModule;
-        default = null;
-        description = "Options related to signing commits using GnuPG.";
+      signing = {
+        key = mkOption {
+          type = types.nullOr types.str;
+          default = null;
+          description = ''
+            The default signing key fingerprint.
+
+            Set to `null` to let the signer decide what signing key
+            to use depending on commit’s author.
+          '';
+        };
+
+        format = mkOption {
+          type = types.nullOr (types.enum [ "openpgp" "ssh" "x509" ]);
+          defaultText = literalExpression ''
+            "openpgp" for state version < 25.05,
+            undefined for state version ≥ 25.05
+          '';
+          description = ''
+            The signing method to use when signing commits and tags.
+            Valid values are `openpgp` (OpenPGP/GnuPG), `ssh` (SSH), and `x509` (X.509 certificates).
+          '';
+        };
+
+        signByDefault = mkOption {
+          type = types.nullOr types.bool;
+          default = null;
+          description = "Whether commits and tags should be signed by default.";
+        };
+
+        signer = mkOption {
+          type = types.nullOr types.str;
+          description = "Path to signer binary to use.";
+        };
       };
 
       extraConfig = mkOption {
@@ -188,6 +151,21 @@ in {
         description = ''
           Additional configuration to add. The use of string values is
           deprecated and will be removed in the future.
+        '';
+      };
+
+      hooks = mkOption {
+        type = types.attrsOf types.path;
+        default = { };
+        example = literalExpression ''
+          {
+            pre-commit = ./pre-commit-script;
+          }
+        '';
+        description = ''
+          Configuration helper for Git hooks.
+          See <https://git-scm.com/docs/githooks>
+          for reference.
         '';
       };
 
@@ -233,8 +211,104 @@ in {
           default = false;
           description = ''
             Skip automatic downloading of objects on clone or pull.
-            This requires a manual <command>git lfs pull</command>
+            This requires a manual {command}`git lfs pull`
             every time a new commit is checked out on your repository.
+          '';
+        };
+      };
+
+      maintenance = {
+        enable = mkEnableOption "" // {
+          description = ''
+            Enable the automatic {command}`git maintenance`.
+
+            If you have SSH remotes, set {option}`programs.git.package` to a
+            git version with SSH support (eg: `pkgs.gitFull`).
+
+            See <https://git-scm.com/docs/git-maintenance>.
+          '';
+        };
+
+        repositories = mkOption {
+          type = with types; listOf str;
+          default = [ ];
+          description = ''
+            Repositories on which {command}`git maintenance` should run.
+
+            Should be a list of absolute paths.
+          '';
+        };
+
+        timers = mkOption {
+          type = types.attrsOf types.str;
+          default = {
+            hourly = "*-*-* 1..23:53:00";
+            daily = "Tue..Sun *-*-* 0:53:00";
+            weekly = "Mon 0:53:00";
+          };
+          description = ''
+            Systemd timers to create for scheduled {command}`git maintenance`.
+
+            Key is passed to `--schedule` argument in {command}`git maintenance run`
+            and value is passed to `Timer.OnCalendar` in `systemd.user.timers`.
+          '';
+        };
+      };
+
+      diff-highlight = {
+        enable = mkEnableOption "" // {
+          description = ''
+            Enable the contrib {command}`diff-highlight` syntax highlighter.
+            See <https://github.com/git/git/blob/master/contrib/diff-highlight/README>,
+          '';
+        };
+
+        pagerOpts = mkOption {
+          type = types.listOf types.str;
+          default = [ ];
+          example = [ "--tabs=4" "-RFX" ];
+          description = ''
+            Arguments to be passed to {command}`less`.
+          '';
+        };
+      };
+
+      difftastic = {
+        enable = mkEnableOption "" // {
+          description = ''
+            Enable the {command}`difftastic` syntax highlighter.
+            See <https://github.com/Wilfred/difftastic>.
+          '';
+        };
+
+        package = mkPackageOption pkgs "difftastic" { };
+
+        background = mkOption {
+          type = types.enum [ "light" "dark" ];
+          default = "light";
+          example = "dark";
+          description = ''
+            Determines whether difftastic should use the lighter or darker colors
+            for syntax highlighting.
+          '';
+        };
+
+        color = mkOption {
+          type = types.enum [ "always" "auto" "never" ];
+          default = "auto";
+          example = "always";
+          description = ''
+            Determines when difftastic should color its output.
+          '';
+        };
+
+        display = mkOption {
+          type =
+            types.enum [ "side-by-side" "side-by-side-show-both" "inline" ];
+          default = "side-by-side";
+          example = "inline";
+          description = ''
+            Determines how the output displays - in one column or two columns.
           '';
         };
       };
@@ -242,10 +316,12 @@ in {
       delta = {
         enable = mkEnableOption "" // {
           description = ''
-            Whether to enable the <command>delta</command> syntax highlighter.
-            See <link xlink:href="https://github.com/dandavison/delta" />.
+            Whether to enable the {command}`delta` syntax highlighter.
+            See <https://github.com/dandavison/delta>.
           '';
         };
+
+        package = mkPackageOption pkgs "delta" { };
 
         options = mkOption {
           type = with types;
@@ -268,12 +344,125 @@ in {
           '';
         };
       };
+
+      diff-so-fancy = {
+        enable = mkEnableOption "" // {
+          description = ''
+            Enable the {command}`diff-so-fancy` diff colorizer.
+            See <https://github.com/so-fancy/diff-so-fancy>.
+          '';
+        };
+
+        pagerOpts = mkOption {
+          type = types.listOf types.str;
+          default = [ "--tabs=4" "-RFX" ];
+          description = ''
+            Arguments to be passed to {command}`less`.
+          '';
+        };
+
+        markEmptyLines = mkOption {
+          type = types.bool;
+          default = true;
+          example = false;
+          description = ''
+            Whether the first block of an empty line should be colored.
+          '';
+        };
+
+        changeHunkIndicators = mkOption {
+          type = types.bool;
+          default = true;
+          example = false;
+          description = ''
+            Simplify git header chunks to a more human readable format.
+          '';
+        };
+
+        stripLeadingSymbols = mkOption {
+          type = types.bool;
+          default = true;
+          example = false;
+          description = ''
+            Whether the `+` or `-` at
+            line-start should be removed.
+          '';
+        };
+
+        useUnicodeRuler = mkOption {
+          type = types.bool;
+          default = true;
+          example = false;
+          description = ''
+            By default, the separator for the file header uses Unicode
+            line-drawing characters. If this is causing output errors on
+            your terminal, set this to false to use ASCII characters instead.
+          '';
+        };
+
+        rulerWidth = mkOption {
+          type = types.nullOr types.int;
+          default = null;
+          example = false;
+          description = ''
+            By default, the separator for the file header spans the full
+            width of the terminal. Use this setting to set the width of
+            the file header manually.
+          '';
+        };
+      };
+
+      riff = {
+        enable = mkEnableOption "" // {
+          description = ''
+            Enable the <command>riff</command> diff highlighter.
+            See <link xlink:href="https://github.com/walles/riff" />.
+          '';
+        };
+
+        package = mkPackageOption pkgs "riffdiff" { };
+
+        commandLineOptions = mkOption {
+          type = types.listOf types.str;
+          default = [ ];
+          example = literalExpression ''[ "--no-adds-only-special" ]'';
+          apply = concatStringsSep " ";
+          description = ''
+            Command line arguments to include in the <command>RIFF</command> environment variable.
+
+            Run <command>riff --help</command> for a full list of options
+          '';
+        };
+      };
     };
   };
+
+  imports = [
+    (mkRenamedOptionModule [ "programs" "git" "signing" "gpgPath" ] [
+      "programs"
+      "git"
+      "signing"
+      "signer"
+    ])
+  ];
 
   config = mkIf cfg.enable (mkMerge [
     {
       home.packages = [ cfg.package ];
+
+      assertions = [{
+        assertion = let
+          enabled = [
+            cfg.delta.enable
+            cfg.diff-so-fancy.enable
+            cfg.difftastic.enable
+            cfg.diff-highlight.enable
+            cfg.riff.enable
+          ];
+        in count id enabled <= 1;
+        message =
+          "Only one of 'programs.git.delta.enable' or 'programs.git.difftastic.enable' or 'programs.git.diff-so-fancy.enable' or 'programs.git.diff-highlight' can be set to true at the same time.";
+      }];
 
       programs.git.iniContent.user = {
         name = mkIf (cfg.userName != null) cfg.userName;
@@ -281,7 +470,7 @@ in {
       };
 
       xdg.configFile = {
-        "git/config".text = gitToIni cfg.iniContent;
+        "git/config".text = generators.toGitINI cfg.iniContent;
 
         "git/ignore" = mkIf (cfg.ignores != [ ]) {
           text = concatStringsSep "\n" cfg.ignores + "\n";
@@ -302,7 +491,7 @@ in {
           nameValuePair "sendemail.${name}" (if account.msmtp.enable then {
             smtpServer = "${pkgs.msmtp}/bin/msmtp";
             envelopeSender = "auto";
-            from = address;
+            from = "${realName} <${address}>";
           } else
             {
               smtpEncryption = if smtp.tls.enable then
@@ -317,7 +506,7 @@ in {
                 mkIf smtp.tls.enable (toString smtp.tls.certificatesFile);
               smtpServer = smtp.host;
               smtpUser = userName;
-              from = address;
+              from = "${realName} <${address}>";
             } // optionalAttrs (smtp.port != null) {
               smtpServerPort = smtp.port;
             });
@@ -325,11 +514,47 @@ in {
       (filterAttrs hasSmtp config.accounts.email.accounts);
     }
 
-    (mkIf (cfg.signing != null) {
+    (mkIf (cfg.signing != { }) {
+      programs.git = {
+        signing = {
+          format = if (versionOlder config.home.stateVersion "25.05") then
+            (mkOptionDefault "openpgp")
+          else
+            (mkOptionDefault null);
+          signer = let
+            defaultSigners = {
+              openpgp = getExe config.programs.gpg.package;
+              ssh = getExe' pkgs.openssh "ssh-keygen";
+              x509 = getExe' config.programs.gpg.package "gpgsm";
+            };
+          in mkIf (cfg.signing.format != null)
+          (mkOptionDefault defaultSigners.${cfg.signing.format});
+        };
+
+        iniContent = mkMerge [
+          (mkIf (cfg.signing.key != null) {
+            user.signingKey = mkDefault cfg.signing.key;
+          })
+          (mkIf (cfg.signing.signByDefault != null) {
+            commit.gpgSign = mkDefault cfg.signing.signByDefault;
+            tag.gpgSign = mkDefault cfg.signing.signByDefault;
+          })
+          (mkIf (cfg.signing.format != null) {
+            gpg = {
+              format = mkDefault cfg.signing.format;
+              ${cfg.signing.format}.program = mkDefault cfg.signing.signer;
+            };
+          })
+        ];
+      };
+    })
+
+    (mkIf (cfg.hooks != { }) {
       programs.git.iniContent = {
-        user.signingKey = mkIf (cfg.signing.key != null) cfg.signing.key;
-        commit.gpgSign = cfg.signing.signByDefault;
-        gpg.program = cfg.signing.gpgPath;
+        core.hooksPath = let
+          entries =
+            mapAttrsToList (name: path: { inherit name path; }) cfg.hooks;
+        in toString (pkgs.linkFarm "git-hooks" entries);
       };
     })
 
@@ -358,8 +583,8 @@ in {
           } else {
             include.path = "${path}";
           };
-      in mkAfter
-      (concatStringsSep "\n" (map gitToIni (map include cfg.includes)));
+      in mkAfter (concatStringsSep "\n"
+        (map generators.toGitINI (map include cfg.includes)));
     })
 
     (mkIf cfg.lfs.enable {
@@ -377,15 +602,125 @@ in {
         };
     })
 
-    (mkIf cfg.delta.enable {
-      home.packages = [ pkgs.delta ];
+    (mkIf cfg.maintenance.enable {
+      programs.git.iniContent.maintenance.repo = cfg.maintenance.repositories;
 
-      programs.git.iniContent = let deltaCommand = "${pkgs.delta}/bin/delta";
+      systemd.user.services."git-maintenance@" = {
+        Unit = {
+          Description = "Optimize Git repositories data";
+          Documentation = [ "man:git-maintenance(1)" ];
+        };
+
+        Service = {
+          Type = "oneshot";
+          ExecStart = let exe = lib.getExe cfg.package;
+          in ''
+            "${exe}" for-each-repo --keep-going --config=maintenance.repo maintenance run --schedule=%i
+          '';
+          LockPersonality = "yes";
+          MemoryDenyWriteExecute = "yes";
+          NoNewPrivileges = "yes";
+          RestrictAddressFamilies = "AF_UNIX AF_INET AF_INET6 AF_VSOCK";
+          RestrictNamespaces = "yes";
+          RestrictRealtime = "yes";
+          RestrictSUIDSGID = "yes";
+          SystemCallArchitectures = "native";
+          SystemCallFilter = "@system-service";
+        };
+      };
+
+      systemd.user.timers = let
+        toSystemdTimer = name: time:
+          lib.attrsets.nameValuePair "git-maintenance@${name}" {
+            Unit.Description = "Optimize Git repositories data";
+
+            Timer = {
+              OnCalendar = time;
+              Persistent = true;
+            };
+
+            Install.WantedBy = [ "timers.target" ];
+          };
+      in lib.attrsets.mapAttrs' toSystemdTimer cfg.maintenance.timers;
+    })
+
+    (mkIf cfg.diff-highlight.enable {
+      programs.git.iniContent = let
+        dhCommand =
+          "${cfg.package}/share/git/contrib/diff-highlight/diff-highlight";
       in {
+        core.pager = "${dhCommand} | ${getExe pkgs.less} ${
+            escapeShellArgs cfg.diff-highlight.pagerOpts
+          }";
+        interactive.diffFilter = dhCommand;
+      };
+    })
+
+    (mkIf cfg.difftastic.enable {
+      home.packages = [ cfg.difftastic.package ];
+
+      programs.git.iniContent = let
+        difftCommand = concatStringsSep " " [
+          "${getExe cfg.difftastic.package}"
+          "--color ${cfg.difftastic.color}"
+          "--background ${cfg.difftastic.background}"
+          "--display ${cfg.difftastic.display}"
+        ];
+      in { diff.external = difftCommand; };
+    })
+
+    (let
+      deltaPackage = cfg.delta.package;
+      deltaCommand = "${deltaPackage}/bin/delta";
+    in mkIf cfg.delta.enable {
+      home.packages = [ deltaPackage ];
+
+      programs.git.iniContent = {
         core.pager = deltaCommand;
         interactive.diffFilter = "${deltaCommand} --color-only";
         delta = cfg.delta.options;
       };
+    })
+
+    (mkIf cfg.diff-so-fancy.enable {
+      home.packages = [ pkgs.diff-so-fancy ];
+
+      programs.git.iniContent =
+        let dsfCommand = "${pkgs.diff-so-fancy}/bin/diff-so-fancy";
+        in {
+          core.pager = "${dsfCommand} | ${pkgs.less}/bin/less ${
+              escapeShellArgs cfg.diff-so-fancy.pagerOpts
+            }";
+          interactive.diffFilter = "${dsfCommand} --patch";
+          diff-so-fancy = {
+            markEmptyLines = cfg.diff-so-fancy.markEmptyLines;
+            changeHunkIndicators = cfg.diff-so-fancy.changeHunkIndicators;
+            stripLeadingSymbols = cfg.diff-so-fancy.stripLeadingSymbols;
+            useUnicodeRuler = cfg.diff-so-fancy.useUnicodeRuler;
+            rulerWidth = mkIf (cfg.diff-so-fancy.rulerWidth != null)
+              (cfg.diff-so-fancy.rulerWidth);
+          };
+        };
+    })
+
+    (let riffExe = baseNameOf (getExe cfg.riff.package);
+    in mkIf cfg.riff.enable {
+      home.packages = [ cfg.riff.package ];
+
+      # https://github.com/walles/riff/blob/b17e6f17ce807c8652bc59cd46758661d23ce358/README.md#usage
+      programs.git.iniContent = {
+        pager = {
+          diff = riffExe;
+          log = riffExe;
+          show = riffExe;
+        };
+
+        interactive.diffFilter = "${riffExe} --color=on";
+      };
+    })
+
+    (mkIf (cfg.riff.enable && cfg.riff.commandLineOptions != "") {
+      home.sessionVariables.RIFF = cfg.riff.commandLineOptions;
     })
   ]);
 }

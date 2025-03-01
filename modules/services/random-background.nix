@@ -18,11 +18,11 @@ in {
       enable = mkEnableOption "" // {
         description = ''
           Whether to enable random desktop background.
-          </para><para>
+
           Note, if you are using NixOS and have set up a custom
           desktop manager session for Home Manager, then the session
-          configuration must have the <option>bgSupport</option>
-          option set to <literal>true</literal> or the background
+          configuration must have the `bgSupport`
+          option set to `true` or the background
           image set by this module may be overwritten.
         '';
       };
@@ -68,6 +68,11 @@ in {
 
   config = mkIf cfg.enable (mkMerge ([
     {
+      assertions = [
+        (hm.assertions.assertPlatform "services.random-background" pkgs
+          platforms.linux)
+      ];
+
       systemd.user.services.random-background = {
         Unit = {
           Description = "Set random desktop background using feh";

@@ -1,11 +1,9 @@
-{ runCommand, lib, bash, callPackage, coreutils, findutils, gettext, gnused
-, less
+{ runCommand, lib, bash, callPackage, coreutils, findutils, gettext, gnused, jq
+, less, ncurses, inetutils
 # used for pkgs.path for nixos-option
 , pkgs
 
-# Extra path to Home Manager. If set then this path will be tried
-# before `$HOME/.config/nixpkgs/home-manager` and
-# `$HOME/.nixpkgs/home-manager`.
+# Path to use as the Home Manager channel.
 , path ? null }:
 
 let
@@ -19,6 +17,7 @@ in runCommand "home-manager" {
   preferLocalBuild = true;
   nativeBuildInputs = [ gettext ];
   meta = with lib; {
+    mainProgram = "home-manager";
     description = "A user environment configurator";
     maintainers = [ maintainers.rycee ];
     platforms = platforms.unix;
@@ -30,7 +29,17 @@ in runCommand "home-manager" {
   substituteInPlace $out/bin/home-manager \
     --subst-var-by bash "${bash}" \
     --subst-var-by DEP_PATH "${
-      lib.makeBinPath [ coreutils findutils gettext gnused less nixos-option ]
+      lib.makeBinPath [
+        coreutils
+        findutils
+        gettext
+        gnused
+        jq
+        less
+        ncurses
+        nixos-option
+        inetutils # for `hostname`
+      ]
     }" \
     --subst-var-by HOME_MANAGER_LIB '${../lib/bash/home-manager.sh}' \
     --subst-var-by HOME_MANAGER_PATH '${pathStr}' \

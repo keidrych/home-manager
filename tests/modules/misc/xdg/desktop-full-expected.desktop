@@ -1,16 +1,26 @@
 [Desktop Entry]
-Categories=Network;WebBrowser;
+Actions=Default;New-Window
+Categories=Network;WebBrowser
 Comment=My Application
 DBusActivatable=false
 Exec=test --option
 GenericName=Web Browser
 Icon=test
 Keywords=calc;math
-MimeType=text/html;text/xml;
+MimeType=text/html;text/xml
 Name=Test
+NoDisplay=false
+PrefersNonDefaultGPU=false
 StartupNotify=false
 Terminal=true
 Type=Application
-[X-ExtraSection]
-Exec=foo -o
+Version=1.4
 
+[Desktop Action Default]
+Exec=test --default
+Name=Default
+
+[Desktop Action New-Window]
+Exec=test --new-window
+Icon=test
+Name=New Window

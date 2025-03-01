@@ -1,42 +1,15 @@
-{ config, lib, pkgs, ... }:
-
-with lib;
+{ realPkgs, ... }:
 
 {
-  config = {
-    programs.broot = {
-      enable = true;
-      modal = true;
-    };
-
-    test.stubs.broot = { };
-
-    nmt.script = ''
-      assertFileExists home-files/.config/broot/conf.toml
-      assertFileContent home-files/.config/broot/conf.toml ${
-        pkgs.writeText "broot.expected" ''
-          modal = true
-
-          [[verbs]]
-          execution = ":parent"
-          invocation = "p"
-
-          [[verbs]]
-          execution = "$EDITOR {file}"
-          invocation = "edit"
-          shortcut = "e"
-
-          [[verbs]]
-          execution = "$EDITOR {directory}/{subpath}"
-          invocation = "create {subpath}"
-
-          [[verbs]]
-          execution = "less {file}"
-          invocation = "view"
-
-          [skin]
-        ''
-      }
-    '';
+  programs.broot = {
+    enable = true;
+    settings.modal = true;
   };
+
+  nixpkgs.overlays = [ (self: super: { inherit (realPkgs) broot hjson-go; }) ];
+
+  nmt.script = ''
+    assertFileExists home-files/.config/broot/conf.toml
+    assertFileContains home-files/.config/broot/conf.toml 'modal = true'
+  '';
 }

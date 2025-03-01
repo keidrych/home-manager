@@ -1,6 +1,4 @@
-{ config, lib, pkgs, ... }:
-
-with lib;
+{ config, ... }:
 
 {
   config = {
@@ -17,9 +15,10 @@ with lib;
       assertPathNotExists home-files/.config/waybar/config
       assertPathNotExists home-files/.config/waybar/style.css
 
-      assertFileContent \
-        home-files/.config/systemd/user/waybar.service \
-        ${./systemd-with-graphical-session-target.service}
+      serviceFile=$(normalizeStorePaths home-files/.config/systemd/user/waybar.service)
+      assertFileContent "$serviceFile" ${
+        ./systemd-with-graphical-session-target.service
+      }
     '';
   };
 }

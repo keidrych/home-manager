@@ -1,8 +1,4 @@
-{ config, lib, pkgs, ... }:
-
-with lib;
-
-{
+{ config, lib, ... }: {
   config = {
     programs.ssh = {
       enable = true;
@@ -12,7 +8,7 @@ with lib;
           proxyJump = "jump-host";
         };
 
-        ordered = hm.dag.entryAfter [ "xyz" ] { port = 1; };
+        ordered = lib.hm.dag.entryAfter [ "xyz" ] { port = 1; };
 
         xyz = {
           identityFile = "file";
@@ -35,6 +31,10 @@ with lib;
             }
           ];
           dynamicForwards = [{ port = 2839; }];
+          setEnv = {
+            FOO = "foo12";
+            BAR = "_bar_ 42";
+          };
         };
 
         "* !github.com" = {
@@ -45,7 +45,7 @@ with lib;
     };
 
     home.file.assertions.text = builtins.toJSON
-      (map (a: a.message) (filter (a: !a.assertion) config.assertions));
+      (map (a: a.message) (lib.filter (a: !a.assertion) config.assertions));
 
     nmt.script = ''
       assertFileExists home-files/.ssh/config

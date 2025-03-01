@@ -2,13 +2,14 @@
 WantedBy=sway-session.target
 
 [Service]
-ExecReload=kill -SIGUSR2 $MAINPID
+ExecReload=/nix/store/00000000000000000000000000000000-coreutils/bin/kill -SIGUSR2 $MAINPID
 ExecStart=@waybar@/bin/waybar
 KillMode=mixed
 Restart=on-failure
 
 [Unit]
-After=graphical-session.target
+After=sway-session.target
+ConditionEnvironment=WAYLAND_DISPLAY
 Description=Highly customizable Wayland bar for Sway and Wlroots based compositors.
 Documentation=https://github.com/Alexays/Waybar/wiki
-PartOf=graphical-session.target
+PartOf=sway-session.target

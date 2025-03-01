@@ -15,7 +15,7 @@ let
     "--basic-auth ${escapeShellArg cfg.httpAuth}");
 
 in {
-  meta.maintainers = [ maintainers.ivar ];
+  meta.maintainers = [ ];
 
   options.services.pbgopy = {
     enable = mkEnableOption "pbgopy";
@@ -34,7 +34,7 @@ in {
       default = "24h";
       example = "10m";
       description = ''
-        The TTL for the cache. Use <literal>"0s"</literal> to disable it.
+        The TTL for the cache. Use `"0s"` to disable it.
       '';
     };
 

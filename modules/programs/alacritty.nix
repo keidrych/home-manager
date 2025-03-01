@@ -4,7 +4,7 @@ with lib;
 
 let
   cfg = config.programs.alacritty;
-  yamlFormat = pkgs.formats.yaml { };
+  tomlFormat = pkgs.formats.toml { };
 in {
   options = {
     programs.alacritty = {
@@ -18,7 +18,7 @@ in {
       };
 
       settings = mkOption {
-        type = yamlFormat.type;
+        type = tomlFormat.type;
         default = { };
         example = literalExpression ''
           {
@@ -26,38 +26,39 @@ in {
               lines = 3;
               columns = 200;
             };
-            key_bindings = [
+            keyboard.bindings = [
               {
                 key = "K";
                 mods = "Control";
-                chars = "\\x0c";
+                chars = "\\u000c";
               }
             ];
           }
         '';
         description = ''
           Configuration written to
-          <filename>$XDG_CONFIG_HOME/alacritty/alacritty.yml</filename>. See
-          <link xlink:href="https://github.com/jwilm/alacritty/blob/master/alacritty.yml"/>
-          for the default configuration.
+          {file}`$XDG_CONFIG_HOME/alacritty/alacritty.yml` or
+          {file}`$XDG_CONFIG_HOME/alacritty/alacritty.toml`
+          (the latter being used for alacritty 0.13 and later).
+          See <https://github.com/alacritty/alacritty/tree/master#configuration>
+          for more info.
         '';
       };
     };
   };
 
-  config = mkMerge [
-    (mkIf cfg.enable {
-      home.packages = [ cfg.package ];
+  config = mkIf cfg.enable {
+    home.packages = [ cfg.package ];
 
-      xdg.configFile."alacritty/alacritty.yml" = mkIf (cfg.settings != { }) {
-        # TODO: Replace by the generate function but need to figure out how to
-        # handle the escaping first.
-        #
-        # source = yamlFormat.generate "alacritty.yml" cfg.settings;
-
-        text =
-          replaceStrings [ "\\\\" ] [ "\\" ] (builtins.toJSON cfg.settings);
-      };
-    })
-  ];
+    xdg.configFile."alacritty/alacritty.toml" = lib.mkIf (cfg.settings != { }) {
+      source = (tomlFormat.generate "alacritty.toml" cfg.settings).overrideAttrs
+        (finalAttrs: prevAttrs: {
+          buildCommand = lib.concatStringsSep "\n" [
+            prevAttrs.buildCommand
+            # TODO: why is this needed? Is there a better way to retain escape sequences?
+            "substituteInPlace $out --replace-quiet '\\\\' '\\'"
+          ];
+        });
+    };
+  };
 }

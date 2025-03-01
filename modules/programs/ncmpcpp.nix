@@ -14,7 +14,7 @@ let
   renderValue = option:
     {
       int = toString option;
-      bool = if option then "yes" else "no";
+      bool = lib.hm.booleans.yesNo option;
       string = option;
     }.${builtins.typeOf option};
 
@@ -44,7 +44,7 @@ let
   });
 
 in {
-  meta.maintainers = with maintainers; [ olmokramer ];
+  meta.maintainers = [ hm.maintainers.olmokramer ];
 
   options.programs.ncmpcpp = {
     enable =
@@ -55,14 +55,14 @@ in {
       default = pkgs.ncmpcpp;
       defaultText = literalExpression "pkgs.ncmpcpp";
       description = ''
-        Package providing the <code>ncmpcpp</code> command.
+        Package providing the `ncmpcpp` command.
       '';
       example =
         literalExpression "pkgs.ncmpcpp.override { visualizerSupport = true; }";
     };
 
     mpdMusicDir = mkOption {
-      type = types.nullOr types.path;
+      type = with types; nullOr (coercedTo path toString str);
       default = let mpdCfg = config.services.mpd;
       in if pkgs.stdenv.hostPlatform.isLinux && mpdCfg.enable then
         mpdCfg.musicDirectory
@@ -75,10 +75,10 @@ in {
           null
       '';
       description = ''
-        Value of the <code>mpd_music_dir</code> setting. On Linux platforms the
-        value of <varname>services.mpd.musicDirectory</varname> is used as the
-        default if <varname>services.mpd.enable</varname> is
-        <literal>true</literal>.
+        Value of the `mpd_music_dir` setting. On Linux platforms the
+        value of {var}`services.mpd.musicDirectory` is used as the
+        default if {var}`services.mpd.enable` is
+        `true`.
       '';
       example = "~/music";
     };
@@ -89,10 +89,7 @@ in {
       description = ''
         Attribute set from name of a setting to its value. For available options
         see
-        <citerefentry>
-          <refentrytitle>ncmpcpp</refentrytitle>
-          <manvolnum>1</manvolnum>
-        </citerefentry>.
+        {manpage}`ncmpcpp(1)`.
       '';
       example = { ncmpcpp_directory = "~/.local/share/ncmpcpp"; };
     };
@@ -123,7 +120,7 @@ in {
     xdg.configFile = {
       "ncmpcpp/config" = let
         settings = cfg.settings // optionalAttrs (cfg.mpdMusicDir != null) {
-          mpd_music_dir = toString cfg.mpdMusicDir;
+          mpd_music_dir = cfg.mpdMusicDir;
         };
       in mkIf (settings != { }) { text = renderSettings settings + "\n"; };
 

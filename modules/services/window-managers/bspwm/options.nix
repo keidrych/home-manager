@@ -4,7 +4,11 @@ with lib;
 
 let
 
+  primitive = with types; oneOf [ bool int float str ];
+
   rule = types.submodule {
+    freeformType = with types; attrsOf primitive;
+
     options = {
       monitor = mkOption {
         type = types.nullOr types.str;
@@ -86,7 +90,7 @@ let
         type = types.nullOr types.bool;
         default = null;
         description = ''
-          Whether the node should ignore <command>node --close</command>
+          Whether the node should ignore {command}`node --close`
           messages.
         '';
         example = true;
@@ -139,12 +143,19 @@ let
         description = "Whether the node should have border.";
         example = true;
       };
+
+      rectangle = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        description = "The node's geometry, in the format `WxH+X+Y`.";
+        example = "800x600+32+32";
+      };
     };
   };
 
 in {
   xsession.windowManager.bspwm = {
-    enable = mkEnableOption "bspwm window manager.";
+    enable = mkEnableOption "bspwm window manager";
 
     package = mkOption {
       type = types.package;
@@ -155,11 +166,9 @@ in {
     };
 
     settings = mkOption {
-      type = with types;
-        let primitive = either bool (either int (either float str));
-        in attrsOf (either primitive (listOf primitive));
+      type = with types; attrsOf (either primitive (listOf primitive));
       default = { };
-      description = "General settings given to <literal>bspc config</literal>.";
+      description = "General settings given to `bspc config`.";
       example = {
         "border_width" = 2;
         "split_ratio" = 0.52;
@@ -177,12 +186,32 @@ in {
       '';
     };
 
+    extraConfigEarly = mkOption {
+      type = types.lines;
+      default = "";
+      description =
+        "Like extraConfig, except commands are run at the start of the config file.";
+    };
+
     monitors = mkOption {
       type = types.attrsOf (types.listOf types.str);
       default = { };
       description =
         "Specifies the names of desktops to create on each monitor.";
       example = { "HDMI-0" = [ "web" "terminal" "III" "IV" ]; };
+    };
+
+    alwaysResetDesktops = mkOption {
+      type = types.bool;
+      default = true;
+      description = ''
+        If set to `true`, desktops configured in {option}`monitors` will be reset
+        every time the config is run.
+
+        If set to `false`, desktops will only be configured the first time the config is run.
+        This is useful if you want to dynamically add desktops and you don't want them to be destroyed if you
+        re-run `bspwmrc`.
+      '';
     };
 
     rules = mkOption {

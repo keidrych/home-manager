@@ -119,11 +119,11 @@ let
           else "us";
         defaultText = literalExpression "null";
         description = ''
-          Keyboard layout. If <literal>null</literal>, then the system
+          Keyboard layout. If `null`, then the system
           configuration will be used.
-          </para><para>
-          This defaults to <literal>null</literal> for state
-          version ≥ 19.09 and <literal>"us"</literal> otherwise.
+
+          This defaults to `null` for state
+          version ≥ 19.09 and `"us"` otherwise.
         '';
       };
 
@@ -154,11 +154,11 @@ let
         defaultText = literalExpression "null";
         example = "colemak";
         description = ''
-          X keyboard variant. If <literal>null</literal>, then the
+          X keyboard variant. If `null`, then the
           system configuration will be used.
-          </para><para>
-          This defaults to <literal>null</literal> for state
-          version ≥ 19.09 and <literal>""</literal> otherwise.
+
+          This defaults to `null` for state
+          version ≥ 19.09 and `""` otherwise.
         '';
       };
     };
@@ -175,7 +175,7 @@ in
       done automatically if the shell configuration is managed by Home
       Manager. If not, then you must source the
 
-        ~/.nix-profile/etc/profile.d/hm-session-vars.sh
+        ${cfg.profileDirectory}/etc/profile.d/hm-session-vars.sh
 
       file yourself.
     '')
@@ -229,7 +229,7 @@ in
         "null" for state version ≥ 21.11
       '';
       description = ''
-        Keyboard configuration. Set to <literal>null</literal> to
+        Keyboard configuration. Set to `null` to
         disable Home Manager keyboard management.
       '';
     };
@@ -246,48 +246,58 @@ in
       description = ''
         An attribute set that maps aliases (the top level attribute names
         in this option) to command strings or directly to build outputs.
-        </para><para>
+
         This option should only be used to manage simple aliases that are
         compatible across all shells. If you need to use a shell specific
         feature then make sure to use a shell specific option, for example
-        <xref linkend="opt-programs.bash.shellAliases"/> for Bash.
+        [](#opt-programs.bash.shellAliases) for Bash.
       '';
     };
 
     home.sessionVariables = mkOption {
       default = {};
-      type = types.attrs;
+      type = with types; lazyAttrsOf (oneOf [ str path int float ]);
       example = { EDITOR = "emacs"; GS_OPTIONS = "-sPAPERSIZE=a4"; };
       description = ''
         Environment variables to always set at login.
-        </para><para>
+
         The values may refer to other environment variables using
         POSIX.2 style variable references. For example, a variable
-        <varname>parameter</varname> may be referenced as
-        <code>$parameter</code> or <code>''${parameter}</code>. A
-        default value <literal>foo</literal> may be given as per
-        <code>''${parameter:-foo}</code> and, similarly, an alternate
-        value <literal>bar</literal> can be given as per
-        <code>''${parameter:+bar}</code>.
-        </para><para>
+        {var}`parameter` may be referenced as
+        `$parameter` or `''${parameter}`. A
+        default value `foo` may be given as per
+        `''${parameter:-foo}` and, similarly, an alternate
+        value `bar` can be given as per
+        `''${parameter:+bar}`.
+
         Note, these variables may be set in any order so no session
         variable may have a runtime dependency on another session
         variable. In particular code like
-        <programlisting language="nix">
+        ```nix
         home.sessionVariables = {
           FOO = "Hello";
           BAR = "$FOO World!";
         };
-        </programlisting>
+        ```
         may not work as expected. If you need to reference another
-        session variable, then do so inside Nix instead. The above
-        example then becomes
-        <programlisting language="nix">
+        session variable (even if it is declared by using other options
+        like [](#opt-xdg.configHome)), then do so inside Nix instead.
+        The above example then becomes
+        ```nix
         home.sessionVariables = {
           FOO = "Hello";
           BAR = "''${config.home.sessionVariables.FOO} World!";
         };
-        </programlisting>
+        ```
+      '';
+    };
+
+    home.sessionVariablesPackage = mkOption {
+      type = types.package;
+      internal = true;
+      description = ''
+        The package containing the
+        {file}`hm-session-vars.sh` file.
       '';
     };
 
@@ -300,14 +310,12 @@ in
         ".git/safe/../../bin"
       ];
       description = ''
-        Extra directories to add to <envar>PATH</envar>.
+        Extra directories to add to {env}`PATH`.
 
-        </para><para>
-
-        These directories are added to the <envar>PATH</envar> variable in a
-        double-quoted context, so expressions like <code>$HOME</code> are
-        expanded by the shell. However, since expressions like <code>~</code> or
-        <code>*</code> are escaped, they will end up in the <envar>PATH</envar>
+        These directories are added to the {env}`PATH` variable in a
+        double-quoted context, so expressions like `$HOME` are
+        expanded by the shell. However, since expressions like `~` or
+        `*` are escaped, they will end up in the {env}`PATH`
         verbatim.
       '';
     };
@@ -318,7 +326,7 @@ in
       internal = true;
       description = ''
         Extra configuration to add to the
-        <filename>hm-session-vars.sh</filename> file.
+        {file}`hm-session-vars.sh` file.
       '';
     };
 
@@ -334,7 +342,7 @@ in
       example = [ "doc" "info" "devdoc" ];
       description = ''
         List of additional package outputs of the packages
-        <varname>home.packages</varname> that should be installed into
+        {var}`home.packages` that should be installed into
         the user environment.
       '';
     };
@@ -346,12 +354,18 @@ in
 
     home.emptyActivationPath = mkOption {
       internal = true;
-      default = false;
       type = types.bool;
+      default = versionAtLeast stateVersion "22.11";
+      defaultText = literalExpression ''
+        false   for state version < 22.11,
+        true    for state version ≥ 22.11
+      '';
       description = ''
         Whether the activation script should start with an empty
-        <envar>PATH</envar> variable. When <literal>false</literal>
-        then the user's <envar>PATH</envar> will be used.
+        {env}`PATH` variable. When `false` then the
+        user's {env}`PATH` will be accessible in the script. It is
+        recommended to keep this at `true` to avoid
+        uncontrolled use of tools found in PATH.
       '';
     };
 
@@ -361,7 +375,7 @@ in
       example = literalExpression ''
         {
           myActivationAction = lib.hm.dag.entryAfter ["writeBoundary"] '''
-            $DRY_RUN_CMD ln -s $VERBOSE_ARG \
+            run ln -s $VERBOSE_ARG \
                 ''${builtins.toPath ./link-me-directly} $HOME
           ''';
         }
@@ -372,35 +386,43 @@ in
         meaning running twice or more times produces the same result
         as running it once.
 
-        </para><para>
-
         If the script block produces any observable side effect, such
         as writing or deleting files, then it
-        <emphasis>must</emphasis> be placed after the special
-        <literal>writeBoundary</literal> script block. Prior to the
+        *must* be placed after the special
+        `writeBoundary` script block. Prior to the
         write boundary one can place script blocks that verifies, but
         does not modify, the state of the system and exits if an
         unexpected state is found. For example, the
-        <literal>checkLinkTargets</literal> script block checks for
+        `checkLinkTargets` script block checks for
         collisions between non-managed files and files defined in
-        <varname><link linkend="opt-home.file">home.file</link></varname>.
+        [](#opt-home.file).
 
-        </para><para>
+        A script block should respect the {var}`DRY_RUN` variable. If it is set
+        then the actions taken by the script should be logged to standard out
+        and not actually performed. A convenient shell function {command}`run`
+        is provided for activation script blocks. It is used as follows:
 
-        A script block should respect the <varname>DRY_RUN</varname>
-        variable, if it is set then the actions taken by the script
-        should be logged to standard out and not actually performed.
-        The variable <varname>DRY_RUN_CMD</varname> is set to
-        <command>echo</command> if dry run is enabled.
+        {command}`run {command}`
+        : Runs the given command on live run, otherwise prints the command to
+        standard output.
 
-        </para><para>
+        {command}`run --quiet {command}`
+        : Runs the given command on live run and sends its standard output to
+        {file}`/dev/null`, otherwise prints the command to standard output.
 
-        A script block should also respect the
-        <varname>VERBOSE</varname> variable, and if set print
-        information on standard out that may be useful for debugging
-        any issue that may arise. The variable
-        <varname>VERBOSE_ARG</varname> is set to
-        <option>--verbose</option> if verbose output is enabled.
+        {command}`run --silence {command}`
+        : Runs the given command on live run and sends its standard and error
+        output to {file}`/dev/null`, otherwise prints the command to standard
+        output.
+
+        The `--quiet` and `--silence` flags are mutually exclusive.
+
+        A script block should also respect the {var}`VERBOSE` variable, and if
+        set print information on standard out that may be useful for debugging
+        any issue that may arise. The variable {var}`VERBOSE_ARG` is set to
+        {option}`--verbose` if verbose output is enabled. You can also use the
+        provided shell function {command}`verboseEcho`, which acts as
+        {command}`echo` when verbose output is enabled.
       '';
     };
 
@@ -415,7 +437,7 @@ in
       type = types.listOf types.package;
       default = [ ];
       description = ''
-        Extra packages to add to <envar>PATH</envar> within the activation
+        Extra packages to add to {env}`PATH` within the activation
         script.
       '';
     };
@@ -440,16 +462,22 @@ in
 
     home.enableNixpkgsReleaseCheck = mkOption {
       type = types.bool;
-      default = false;          # Temporarily disabled until release stabilizes.
+      default = true;
       description = ''
         Determines whether to check for release version mismatch between Home
         Manager and Nixpkgs. Using mismatched versions is likely to cause errors
         and unexpected behavior. It is therefore highly recommended to use a
-        release of Home Manager than corresponds with your chosen release of
+        release of Home Manager that corresponds with your chosen release of
         Nixpkgs.
-        </para><para>
+
         When this option is enabled and a mismatch is detected then a warning
         will be printed when the user configuration is being built.
+      '';
+    };
+
+    home.preferXdgDirectories = mkEnableOption "" // {
+      description = ''
+        Whether to make programs use XDG directories whenever supported.
       '';
     };
   };
@@ -468,8 +496,8 @@ in
 
     warnings =
       let
-        hmRelease = fileContents ../.release;
-        nixpkgsRelease = pkgs.lib.trivial.release;
+        hmRelease = config.home.version.release;
+        nixpkgsRelease = lib.trivial.release;
         releaseMismatch =
           config.home.enableNixpkgsReleaseCheck
           && hmRelease != nixpkgsRelease;
@@ -482,7 +510,7 @@ in
 
           Using mismatched versions is likely to cause errors and unexpected
           behavior. It is therefore highly recommended to use a release of Home
-          Manager than corresponds with your chosen release of Nixpkgs.
+          Manager that corresponds with your chosen release of Nixpkgs.
 
           If you insist then you can disable this warning by adding
 
@@ -502,6 +530,8 @@ in
       if config.submoduleSupport.enable
         && config.submoduleSupport.externalPackageInstall
       then "/etc/profiles/per-user/${cfg.username}"
+      else if config.nix.enable && (config.nix.settings.use-xdg-base-directories or false)
+      then "${config.xdg.stateHome}/nix/profile"
       else cfg.homeDirectory + "/.nix-profile";
 
     programs.bash.shellAliases = cfg.shellAliases;
@@ -536,28 +566,34 @@ in
         //
         (maybeSet "LC_MEASUREMENT" cfg.language.measurement);
 
-    home.packages = [
-      # Provide a file holding all session variables.
-      (
-        pkgs.writeTextFile {
-          name = "hm-session-vars.sh";
-          destination = "/etc/profile.d/hm-session-vars.sh";
-          text = ''
-            # Only source this once.
-            if [ -n "$__HM_SESS_VARS_SOURCED" ]; then return; fi
-            export __HM_SESS_VARS_SOURCED=1
+    # Provide a file holding all session variables.
+    home.sessionVariablesPackage = pkgs.writeTextFile {
+      name = "hm-session-vars.sh";
+      destination = "/etc/profile.d/hm-session-vars.sh";
+      text = ''
+        # Only source this once.
+        if [ -n "$__HM_SESS_VARS_SOURCED" ]; then return; fi
+        export __HM_SESS_VARS_SOURCED=1
 
-            ${config.lib.shell.exportAll cfg.sessionVariables}
-          '' + lib.optionalString (cfg.sessionPath != [ ]) ''
-            export PATH="$PATH''${PATH:+:}${concatStringsSep ":" cfg.sessionPath}"
-          '' + cfg.sessionVariablesExtra;
-        }
-      )
-    ];
+        ${config.lib.shell.exportAll cfg.sessionVariables}
+      '' + lib.optionalString (cfg.sessionPath != [ ]) ''
+        export PATH="$PATH''${PATH:+:}${concatStringsSep ":" cfg.sessionPath}"
+      '' + cfg.sessionVariablesExtra;
+    };
 
-    # A dummy entry acting as a boundary between the activation
-    # script's "check" and the "write" phases.
-    home.activation.writeBoundary = hm.dag.entryAnywhere "";
+    home.packages = [ config.home.sessionVariablesPackage ];
+
+    # The entry acting as a boundary between the activation script's "check" and
+    # the "write" phases. This is where we commit to attempting to actually
+    # activate the configuration.
+    home.activation.writeBoundary = hm.dag.entryAnywhere ''
+      if [[ ! -v oldGenPath || "$oldGenPath" != "$newGenPath" ]] ; then
+        _i "Creating new profile generation"
+        run nix-env $VERBOSE_ARG --profile "$genProfilePath" --set "$newGenPath"
+      else
+        _i "No change so reusing latest profile generation"
+      fi
+    '';
 
     # Install packages to the user environment.
     #
@@ -578,30 +614,37 @@ in
       if config.submoduleSupport.externalPackageInstall
       then
         ''
-          if nix-env -q | grep '^home-manager-path$'; then
-            $DRY_RUN_CMD nix-env -e home-manager-path
-          fi
+          nixProfileRemove home-manager-path
         ''
       else
         ''
-          if ! $DRY_RUN_CMD nix-env -i ${cfg.path} ; then
-            cat <<EOF
+          function nixReplaceProfile() {
+            local oldNix="$(command -v nix)"
 
-          Oops, nix-env failed to install your new Home Manager profile!
+            nixProfileRemove 'home-manager-path'
 
-          Perhaps there is a conflict with a package that was installed using
-          'nix-env -i'? Try running
+            run $oldNix profile install $1
+          }
 
-              nix-env -q
+          if [[ -e ${cfg.profileDirectory}/manifest.json ]] ; then
+            INSTALL_CMD="nix profile install"
+            INSTALL_CMD_ACTUAL="nixReplaceProfile"
+            LIST_CMD="nix profile list"
+            REMOVE_CMD_SYNTAX='nix profile remove {number | store path}'
+          else
+            INSTALL_CMD="nix-env -i"
+            INSTALL_CMD_ACTUAL="run nix-env -i"
+            LIST_CMD="nix-env -q"
+            REMOVE_CMD_SYNTAX='nix-env -e {package name}'
+          fi
 
-          and if there is a conflicting package you can remove it with
-
-              nix-env -e {package name}
-
-          Then try activating your Home Manager configuration again.
-          EOF
+          if ! $INSTALL_CMD_ACTUAL ${cfg.path} ; then
+            echo
+            _iError $'Oops, Nix failed to install your new Home Manager profile!\n\nPerhaps there is a conflict with a package that was installed using\n"%s"? Try running\n\n    %s\n\nand if there is a conflicting package you can remove it with\n\n    %s\n\nThen try activating your Home Manager configuration again.' "$INSTALL_CMD" "$LIST_CMD" "$REMOVE_CMD_SYNTAX"
             exit 1
           fi
+          unset -f nixReplaceProfile
+          unset INSTALL_CMD INSTALL_CMD_ACTUAL LIST_CMD REMOVE_CMD_SYNTAX
         ''
     );
 
@@ -611,7 +654,7 @@ in
     lib.bash.initHomeManagerLib =
       let
         domainDir = pkgs.runCommand "hm-modules-messages" {
-          nativeBuildInputs = [ pkgs.gettext ];
+          nativeBuildInputs = [ pkgs.buildPackages.gettext ];
         } ''
           for path in ${./po}/*.po; do
             lang="''${path##*/}"
@@ -652,8 +695,18 @@ in
             gettext
             gnugrep
             gnused
+            jq
             ncurses             # For `tput`.
-          ] ++ config.home.extraActivationPath
+          ]
+          ++ config.home.extraActivationPath
+        )
+        + (
+          # Add path of the Nix binaries, if a Nix package is configured, then
+          # use that one, otherwise grab the path of the nix-env tool.
+          if config.nix.enable && config.nix.package != null then
+            ":${config.nix.package}/bin"
+          else
+            ":$(${pkgs.coreutils}/bin/dirname $(${pkgs.coreutils}/bin/readlink -m $(type -p nix-env)))"
         )
         + optionalString (!cfg.emptyActivationPath) "\${PATH:+:}$PATH";
 
@@ -668,7 +721,25 @@ in
 
           ${builtins.readFile ./lib-bash/activation-init.sh}
 
+          if [[ ! -v SKIP_SANITY_CHECKS ]]; then
+            checkUsername ${escapeShellArg config.home.username}
+            checkHomeDirectory ${escapeShellArg config.home.homeDirectory}
+          fi
+
+          # Create a temporary GC root to prevent collection during activation.
+          trap 'run rm -f $VERBOSE_ARG "$newGenGcPath"' EXIT
+          run --silence nix-store --realise "$newGenPath" --add-root "$newGenGcPath"
+
           ${activationCmds}
+
+          ${optionalString (!config.uninstall) ''
+            # Create the "current generation" GC root.
+            run --silence nix-store --realise "$newGenPath" --add-root "$currentGenGcPath"
+
+            if [[ -e "$legacyGenGcPath" ]]; then
+              run rm $VERBOSE_ARG "$legacyGenGcPath"
+            fi
+          ''}
         '';
       in
         pkgs.runCommand
@@ -678,6 +749,8 @@ in
           }
           ''
             mkdir -p $out
+
+            echo "${config.home.version.full}" > $out/hm-version
 
             cp ${activationScript} $out/activate
 

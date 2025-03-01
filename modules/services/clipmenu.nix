@@ -18,6 +18,16 @@ in {
       defaultText = "pkgs.clipmenu";
       description = "clipmenu derivation to use.";
     };
+
+    launcher = mkOption {
+      type = types.nullOr types.str;
+      default = null;
+      example = "rofi";
+      description = ''
+        Launcher command, if not set, {command}`dmenu`
+        will be used by default.
+      '';
+    };
   };
 
   config = mkIf cfg.enable {
@@ -28,6 +38,9 @@ in {
 
     home.packages = [ cfg.package ];
 
+    home.sessionVariables =
+      mkIf (cfg.launcher != null) { CM_LAUNCHER = cfg.launcher; };
+
     systemd.user.services.clipmenu = {
       Unit = {
         Description = "Clipboard management daemon";
@@ -36,10 +49,12 @@ in {
 
       Service = {
         ExecStart = "${cfg.package}/bin/clipmenud";
-        Environment = "PATH=${
+        Environment = [
+          "PATH=${
             makeBinPath
             (with pkgs; [ coreutils findutils gnugrep gnused systemd ])
-          }";
+          }"
+        ];
       };
 
       Install = { WantedBy = [ "graphical-session.target" ]; };

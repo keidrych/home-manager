@@ -14,9 +14,12 @@ let
     options = {
       enable = mkEnableOption "prezto";
 
+      package = mkPackageOption pkgs "prezto" { default = "zsh-prezto"; };
+
       caseSensitive = mkOption {
         type = types.nullOr types.bool;
-        default = null;
+        # See <https://github.com/nix-community/home-manager/issues/2255>.
+        default = true;
         example = true;
         description =
           "Set case-sensitivity for completion, history lookup, etc.";
@@ -26,21 +29,24 @@ let
         type = types.nullOr types.bool;
         default = true;
         example = false;
-        description = "Color output (auto set to 'no' on dumb terminals)";
+        description = ''
+          Color output (automatically set to `false` on dumb terminals).
+        '';
       };
 
       pmoduleDirs = mkOption {
         type = types.listOf types.path;
         default = [ ];
-        example = [ "$HOME/.zprezto-contrib" ];
-        description = "Add additional directories to load prezto modules from";
+        example = literalExpression
+          ''[ "''${config.home.homeDirectory}/.zprezto-contrib" ]'';
+        description = "Add additional directories to load prezto modules from.";
       };
 
       extraConfig = mkOption {
         type = types.lines;
         default = "";
         description = ''
-          Additional configuration to add to <filename>.zpreztorc</filename>.
+          Additional configuration to add to {file}`.zpreztorc`.
         '';
       };
 
@@ -48,14 +54,18 @@ let
         type = types.listOf types.str;
         default = [ ];
         example = [ "attr" "stat" ];
-        description = "Set the Zsh modules to load (man zshmodules).";
+        description = ''
+          Set the Zsh modules to load ({manpage}`zshmodules(1)`).
+        '';
       };
 
       extraFunctions = mkOption {
         type = types.listOf types.str;
         default = [ ];
         example = [ "zargs" "zmv" ];
-        description = "Set the Zsh functions to load (man zshcontrib).";
+        description = ''
+          Set the Zsh functions to load ({manpage}`zshcontrib(1)`).
+        '';
       };
 
       pmodules = mkOption {
@@ -86,8 +96,10 @@ let
         type = types.listOf types.str;
         default = [ ];
         example = [ "0.0.0.0" "127.0.0.1" ];
-        description =
-          "Set the entries to ignore in static */etc/hosts* for host completion.";
+        description = ''
+          Set the entries to ignore in static {file}`/etc/hosts` for
+          host completion.
+        '';
       };
 
       editor = {
@@ -95,21 +107,25 @@ let
           type = types.nullOr (types.enum [ "emacs" "vi" ]);
           default = "emacs";
           example = "vi";
-          description = "Set the key mapping style to 'emacs' or 'vi'.";
+          description = ''
+            Set the key mapping style to `emacs` or `vi`.
+          '';
         };
 
         dotExpansion = mkOption {
           type = types.nullOr types.bool;
           default = null;
           example = true;
-          description = "Auto convert .... to ../..";
+          description = ''
+            Automatically convert `....` to `../..`
+          '';
         };
 
         promptContext = mkOption {
           type = types.nullOr types.bool;
           default = null;
           example = true;
-          description = "Allow the zsh prompt context to be shown.";
+          description = "Allow the Zsh prompt context to be shown.";
         };
       };
 
@@ -117,8 +133,10 @@ let
         type = types.nullOr (types.enum [ "dirty" "untracked" "all" "none" ]);
         default = null;
         example = "all";
-        description =
-          "Ignore submodules when they are 'dirty', 'untracked', 'all', or 'none'.";
+        description = ''
+          Ignore submodules when they are `dirty`, `untracked`, `all`,
+          or `none`.
+        '';
       };
 
       gnuUtility.prefix = mkOption {
@@ -154,8 +172,10 @@ let
         type = types.nullOr types.str;
         default = null;
         example = "manpages";
-        description =
-          "Set the keyword used by `mand` to open man pages in Dash.app";
+        description = ''
+          Set the keyword used by {command}`mand` to open man pages
+          in Dash.app.
+        '';
       };
 
       prompt = {
@@ -164,8 +184,10 @@ let
           default = "sorin";
           example = "pure";
           description = ''
-            Set the prompt theme to load. Setting it to 'random'
-                      loads a random theme. Auto set to 'off' on dumb terminals.'';
+            Set the prompt theme to load. Setting it to `random`
+            loads a random theme. Automatically set to `off` on dumb
+            terminals.
+          '';
         };
 
         pwdLength = mkOption {
@@ -174,8 +196,10 @@ let
           example = "short";
           description = ''
             Set the working directory prompt display length. By
-                      default, it is set to 'short'. Set it to 'long' (without '~' expansion) for
-                      longer or 'full' (with '~' expansion) for even longer prompt display.'';
+            default, it is set to `short`. Set it to `long` (without `~`
+            expansion) for longer or `full` (with `~` expansion) for
+            even longer prompt display.
+          '';
         };
 
         showReturnVal = mkOption {
@@ -184,7 +208,8 @@ let
           example = true;
           description = ''
             Set the prompt to display the return code along with an
-                      indicator for non-zero return codes. This is not supported by all prompts.'';
+            indicator for non-zero return codes. This is not supported by all prompts.
+          '';
         };
       };
 
@@ -244,7 +269,8 @@ let
           example = [ "main" "brackets" "pattern" "line" "cursor" "root" ];
           description = ''
             Set syntax highlighters. By default, only the main
-                      highlighter is enabled.'';
+            highlighter is enabled.
+          '';
         };
 
         styles = mkOption {
@@ -333,14 +359,17 @@ let
         default = null;
         example = true;
         description = ''
-          Enabled safe options. This aliases cp, ln, mv and rm so
-                  that they prompt before deleting or overwriting files. Set to 'no' to disable
-                  this safer behavior.'';
+          Enabled safe options. This aliases {command}`cp`,
+          {command}`ln`, {command}`mv` and {command}`rm` so that they
+          prompt before deleting or overwriting files. Set to `no` to
+          disable this safer behavior.
+        '';
       };
     };
   };
 
 in {
+  meta.maintainers = [ maintainers.nickhu ];
   options = {
     programs.zsh = {
       prezto = mkOption {
@@ -352,24 +381,24 @@ in {
   };
   config = mkIf cfg.enable (mkMerge [{
     home.file."${relToDotDir ".zprofile"}".text =
-      builtins.readFile "${pkgs.zsh-prezto}/share/zsh-prezto/runcoms/zprofile";
+      builtins.readFile "${cfg.package}/share/zsh-prezto/runcoms/zprofile";
     home.file."${relToDotDir ".zlogin"}".text =
-      builtins.readFile "${pkgs.zsh-prezto}/share/zsh-prezto/runcoms/zlogin";
+      builtins.readFile "${cfg.package}/share/zsh-prezto/runcoms/zlogin";
     home.file."${relToDotDir ".zlogout"}".text =
-      builtins.readFile "${pkgs.zsh-prezto}/share/zsh-prezto/runcoms/zlogout";
-    home.packages = with pkgs; [ zsh-prezto ];
+      builtins.readFile "${cfg.package}/share/zsh-prezto/runcoms/zlogout";
+    home.packages = [ cfg.package ];
 
     home.file."${relToDotDir ".zshenv"}".text =
-      builtins.readFile "${pkgs.zsh-prezto}/share/zsh-prezto/runcoms/zshenv";
+      builtins.readFile "${cfg.package}/share/zsh-prezto/runcoms/zshenv";
     home.file."${relToDotDir ".zpreztorc"}".text = ''
       # Generated by Nix
       ${optionalString (cfg.caseSensitive != null) ''
         zstyle ':prezto:*:*' case-sensitive '${
-          if cfg.caseSensitive then "yes" else "no"
+          lib.hm.booleans.yesNo cfg.caseSensitive
         }'
       ''}
       ${optionalString (cfg.color != null) ''
-        zstyle ':prezto:*:*' color '${if cfg.color then "yes" else "no"}'
+        zstyle ':prezto:*:*' color '${lib.hm.booleans.yesNo cfg.color}'
       ''}
       ${optionalString (cfg.pmoduleDirs != [ ]) ''
         zstyle ':prezto:load' pmodule-dirs ${
@@ -410,12 +439,12 @@ in {
       ''}
       ${optionalString (cfg.editor.dotExpansion != null) ''
         zstyle ':prezto:module:editor' dot-expansion '${
-          if cfg.editor.dotExpansion then "yes" else "no"
+          lib.hm.booleans.yesNo cfg.editor.dotExpansion
         }'
       ''}
       ${optionalString (cfg.editor.promptContext != null) ''
         zstyle ':prezto:module:editor' ps-context '${
-          if cfg.editor.promptContext then "yes" else "no"
+          lib.hm.booleans.yesNo cfg.editor.promptContext
         }'
       ''}
       ${optionalString (cfg.git.submoduleIgnore != null) ''
@@ -443,31 +472,33 @@ in {
         zstyle ':prezto:module:prompt' pwd-length '${cfg.prompt.pwdLength}'
       ''}
       ${optionalString (cfg.prompt.showReturnVal != null) ''
-        zstyle ':prezto:module:prompt' show-return-val '${cfg.prompt.showReturnVal}'
+        zstyle ':prezto:module:prompt' show-return-val '${
+          lib.hm.booleans.yesNo cfg.prompt.showReturnVal
+        }'
       ''}
       ${optionalString (cfg.python.virtualenvAutoSwitch != null) ''
         zstyle ':prezto:module:python:virtualenv' auto-switch '${
-          if cfg.python.virtualenvAutoSwitch then "yes" else "no"
+          lib.hm.booleans.yesNo cfg.python.virtualenvAutoSwitch
         }'
       ''}
       ${optionalString (cfg.python.virtualenvInitialize != null) ''
         zstyle ':prezto:module:python:virtualenv' initialize '${
-          if cfg.python.virtualenvInitialize then "yes" else "no"
+          lib.hm.booleans.yesNo cfg.python.virtualenvInitialize
         }'
       ''}
       ${optionalString (cfg.ruby.chrubyAutoSwitch != null) ''
         zstyle ':prezto:module:ruby:chruby' auto-switch '${
-          if cfg.ruby.chrubyAutoSwitch then "yes" else "no"
+          lib.hm.booleans.yesNo cfg.ruby.chrubyAutoSwitch
         }'
       ''}
       ${optionalString (cfg.screen.autoStartLocal != null) ''
         zstyle ':prezto:module:screen:auto-start' local '${
-          if cfg.screen.autoStartLocal then "yes" else "no"
+          lib.hm.booleans.yesNo cfg.screen.autoStartLocal
         }'
       ''}
       ${optionalString (cfg.screen.autoStartRemote != null) ''
         zstyle ':prezto:module:screen:auto-start' remote '${
-          if cfg.screen.autoStartRemote then "yes" else "no"
+          lib.hm.booleans.yesNo cfg.screen.autoStartRemote
         }'
       ''}
       ${optionalString (cfg.ssh.identities != [ ]) ''
@@ -502,7 +533,7 @@ in {
       ''}
       ${optionalString (cfg.terminal.autoTitle != null) ''
         zstyle ':prezto:module:terminal' auto-title '${
-          if cfg.terminal.autoTitle then "yes" else "no"
+          lib.hm.booleans.yesNo cfg.terminal.autoTitle
         }'
       ''}
       ${optionalString (cfg.terminal.windowTitleFormat != null) ''
@@ -516,17 +547,17 @@ in {
       ''}
       ${optionalString (cfg.tmux.autoStartLocal != null) ''
         zstyle ':prezto:module:tmux:auto-start' local '${
-          if cfg.tmux.autoStartLocal then "yes" else "no"
+          lib.hm.booleans.yesNo cfg.tmux.autoStartLocal
         }'
       ''}
       ${optionalString (cfg.tmux.autoStartRemote != null) ''
         zstyle ':prezto:module:tmux:auto-start' remote '${
-          if cfg.tmux.autoStartRemote then "yes" else "no"
+          lib.hm.booleans.yesNo cfg.tmux.autoStartRemote
         }'
       ''}
       ${optionalString (cfg.tmux.itermIntegration != null) ''
         zstyle ':prezto:module:tmux:iterm' integrate '${
-          if cfg.tmux.itermIntegration then "yes" else "no"
+          lib.hm.booleans.yesNo cfg.tmux.itermIntegration
         }'
       ''}
       ${optionalString (cfg.tmux.defaultSessionName != null) ''
@@ -534,7 +565,7 @@ in {
       ''}
       ${optionalString (cfg.utility.safeOps != null) ''
         zstyle ':prezto:module:utility' safe-ops '${
-          if cfg.utility.safeOps then "yes" else "no"
+          lib.hm.booleans.yesNo cfg.utility.safeOps
         }'
       ''}
       ${cfg.extraConfig}

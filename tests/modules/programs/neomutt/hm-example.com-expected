@@ -3,7 +3,6 @@ set ssl_force_tls = yes
 set certificate_file=/etc/ssl/certs/ca-certificates.crt
 
 # GPG section
-set crypt_use_gpgme = yes
 set crypt_autosign = no
 set crypt_opportunistic_encrypt = no
 set pgp_use_gpg_agent = yes
@@ -31,6 +30,8 @@ set trash='+Trash'
 # Extra configuration
 color status cyan default
 
+
+unset signature
 # notmuch section
 set nm_default_uri = "notmuch:///home/hm-user/Mail"
-virtual-mailboxes "My INBOX" "notmuch://?query=tag:inbox"
+virtual-mailboxes "My INBOX" "notmuch://?query=tag%3Ainbox"

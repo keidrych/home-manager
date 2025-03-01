@@ -21,7 +21,14 @@ let
           abort ("values ${toPretty v} is of unsupported type");
     in "set ${n} ${mkValueStr v}";
 
-  mkBindingStr = k: v: ''"${k}": ${v}'';
+  mkBindingStr = k: v:
+    let
+      isKeynameNotKeyseq = k:
+        builtins.elem (builtins.head (lib.splitString "-" (toLower k))) [
+          "control"
+          "meta"
+        ];
+    in if isKeynameNotKeyseq k then "${k}: ${v}" else ''"${k}": ${v}'';
 
 in {
   options.programs.readline = {
@@ -56,13 +63,13 @@ in {
       default = "";
       description = ''
         Configuration lines appended unchanged to the end of the
-        <filename>~/.inputrc</filename> file.
+        {file}`~/.inputrc` file.
       '';
     };
   };
 
-  config = mkIf cfg.enable {
-    home.file.".inputrc".text = let
+  config = mkIf cfg.enable (let
+    finalConfig = let
       configStr = concatStringsSep "\n"
         (optional cfg.includeSystemConfig "$include /etc/inputrc"
           ++ mapAttrsToList mkSetVariableStr cfg.variables
@@ -73,5 +80,13 @@ in {
       ${configStr}
       ${cfg.extraConfig}
     '';
-  };
+  in mkMerge [
+    (mkIf (!config.home.preferXdgDirectories) {
+      home.file.".inputrc".text = finalConfig;
+    })
+    (mkIf config.home.preferXdgDirectories {
+      xdg.configFile.inputrc.text = finalConfig;
+      home.sessionVariables.INPUTRC = "${config.xdg.configHome}/inputrc";
+    })
+  ]);
 }

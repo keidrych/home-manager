@@ -1,17 +1,13 @@
-{ pkgs, ... }: {
-  config = {
-    programs = {
-      scmpuff = {
-        enable = true;
-        enableZshIntegration = false;
-      };
-      zsh.enable = true;
+{
+  programs = {
+    scmpuff = {
+      enable = true;
+      enableZshIntegration = false;
     };
-
-    test.stubs.zsh = { };
-
-    nmt.script = ''
-      assertFileNotRegex home-files/.zshrc '${pkgs.scmpuff} init -s'
-    '';
+    zsh.enable = true;
   };
+
+  nmt.script = ''
+    assertFileNotRegex home-files/.zshrc '@scmpuff@ init -s'
+  '';
 }

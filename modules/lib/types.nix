@@ -1,5 +1,4 @@
-{ lib, dag ? import ./dag.nix { inherit lib; }
-, gvariant ? import ./gvariant.nix { inherit lib; } }:
+{ lib, gvariant ? import ./gvariant.nix { inherit lib; } }:
 
 let
   inherit (lib)
@@ -7,7 +6,7 @@ let
     mergeAttrs mergeDefaultOption mergeOneOption mergeOptions mkOption
     mkOptionType showFiles showOption types;
 
-  typesDag = import ./types-dag.nix { inherit dag lib; };
+  typesDag = import ./types-dag.nix { inherit lib; };
 
   # Needed since the type is called gvariant and its merge attribute
   # must refer back to the type.
@@ -15,7 +14,7 @@ let
 
 in rec {
 
-  inherit (typesDag) dagOf listOrDagOf;
+  inherit (typesDag) dagOf;
 
   selectorFunction = mkOptionType {
     name = "selectorFunction";
@@ -42,7 +41,7 @@ in rec {
         example = literalExpression "pkgs.dejavu_fonts";
         description = ''
           Package providing the font. This package will be installed
-          to your profile. If <literal>null</literal> then the font
+          to your profile. If `null` then the font
           is assumed to already be available in your profile.
         '';
       };
@@ -56,7 +55,7 @@ in rec {
       };
 
       size = mkOption {
-        type = types.nullOr types.int;
+        type = types.nullOr types.number;
         default = null;
         example = "8";
         description = ''
@@ -96,6 +95,10 @@ in rec {
         mergeOneOption loc defs
       else if gvar.isMaybe sharedDefType && allChecked then
         mergeOneOption loc defs
+      else if gvar.isDictionaryEntry sharedDefType && allChecked then
+        mergeOneOption loc defs
+      else if gvar.type.variant == sharedDefType && allChecked then
+        mergeOneOption loc defs
       else if gvar.type.string == sharedDefType && allChecked then
         types.str.merge loc defs
       else if gvar.type.double == sharedDefType && allChecked then
@@ -104,4 +107,27 @@ in rec {
         mergeDefaultOption loc defs;
   };
 
+  nushellValue = let
+    valueType = types.nullOr (types.oneOf [
+      (lib.mkOptionType {
+        name = "nushell";
+        description = "Nushell inline value";
+        descriptionClass = "name";
+        check = lib.isType "nushell-inline";
+      })
+      types.bool
+      types.int
+      types.float
+      types.str
+      types.path
+      (types.attrsOf valueType // {
+        description = "attribute set of Nushell values";
+        descriptionClass = "name";
+      })
+      (types.listOf valueType // {
+        description = "list of Nushell values";
+        descriptionClass = "name";
+      })
+    ]);
+  in valueType;
 }

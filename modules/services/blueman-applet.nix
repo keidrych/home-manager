@@ -8,19 +8,24 @@ with lib;
       enable = mkEnableOption "" // {
         description = ''
           Whether to enable the Blueman applet.
-          </para><para>
-          Note, for the applet to work, the 'blueman' service should
+
+          Note that for the applet to work, the `blueman` service should
           be enabled system-wide. You can enable it in the system
           configuration using
-          <programlisting language="nix">
-            services.blueman.enable = true;
-          </programlisting>
+          ```nix
+          services.blueman.enable = true;
+          ```
         '';
       };
     };
   };
 
   config = mkIf config.services.blueman-applet.enable {
+    assertions = [
+      (hm.assertions.assertPlatform "services.blueman-applet" pkgs
+        platforms.linux)
+    ];
+
     systemd.user.services.blueman-applet = {
       Unit = {
         Description = "Blueman applet";

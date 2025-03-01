@@ -13,9 +13,12 @@ let
 
     Service = {
       Environment = [
-        "GIT_SYNC_DIRECTORY=${repo.path}"
+        "PATH=${
+          lib.makeBinPath (with pkgs; [ openssh git ] ++ repo.extraPackages)
+        }"
+        "GIT_SYNC_DIRECTORY=${strings.escapeShellArg repo.path}"
         "GIT_SYNC_COMMAND=${cfg.package}/bin/git-sync"
-        "GIT_SYNC_REPOSITORY=${repo.uri}"
+        "GIT_SYNC_REPOSITORY=${strings.escapeShellArg repo.uri}"
         "GIT_SYNC_INTERVAL=${toString repo.interval}"
       ];
       ExecStart = "${cfg.package}/bin/git-sync-on-inotify";
@@ -23,9 +26,21 @@ let
     };
   };
 
+  mkAgent = name: repo: {
+    enable = true;
+    config = {
+      StartInterval = repo.interval;
+      ProcessType = "Background";
+      WorkingDirectory = "${repo.path}";
+      WatchPaths = [ "${repo.path}" ];
+      ProgramArguments = [ "${cfg.package}/bin/git-sync" ];
+    };
+  };
+
+  mkService = if pkgs.stdenv.isLinux then mkUnit else mkAgent;
   services = mapAttrs' (name: repo: {
     name = "git-sync-${name}";
-    value = mkUnit name repo;
+    value = mkService name repo;
   }) cfg.repositories;
 
   repositoryType = types.submodule ({ name, ... }: {
@@ -48,8 +63,10 @@ let
         description = ''
           The URI of the remote to be synchronized. This is only used in the
           event that the directory does not already exist. See
-          <link xlink:href="https://git-scm.com/docs/git-clone#_git_urls"/>
+          <https://git-scm.com/docs/git-clone#_git_urls>
           for the supported URIs.
+
+          This option is not supported on Darwin.
         '';
       };
 
@@ -61,11 +78,21 @@ let
           be triggered even without filesystem changes.
         '';
       };
+
+      extraPackages = mkOption {
+        type = with types; listOf package;
+        default = [ ];
+        example = literalExpression "with pkgs; [ git-crypt ]";
+        description = ''
+          Extra packages available to git-sync.
+        '';
+      };
     };
   });
 
 in {
-  meta.maintainers = [ maintainers.imalison ];
+  meta.maintainers =
+    [ maintainers.imalison maintainers.cab404 maintainers.ryane ];
 
   options = {
     services.git-sync = {
@@ -76,7 +103,7 @@ in {
         default = pkgs.git-sync;
         defaultText = literalExpression "pkgs.git-sync";
         description = ''
-          Package containing the <command>git-sync</command> program.
+          Package containing the {command}`git-sync` program.
         '';
       };
 
@@ -85,16 +112,22 @@ in {
         description = ''
           The repositories that should be synchronized.
         '';
+        example = literalExpression ''
+          {
+            xyz = {
+              path = "''${config.home.homeDirectory}/foo/home-manager";
+              uri = "git@github.com:nix-community/home-manager.git";
+              interval = 1000;
+            };
+          }
+        '';
       };
     };
   };
 
-  config = mkIf cfg.enable {
-    assertions = [
-      (lib.hm.assertions.assertPlatform "services.git-sync" pkgs
-        lib.platforms.linux)
-    ];
+  config = mkIf cfg.enable (mkMerge [
+    (mkIf pkgs.stdenv.isLinux { systemd.user.services = services; })
+    (mkIf pkgs.stdenv.isDarwin { launchd.agents = services; })
+  ]);
 
-    systemd.user.services = services;
-  };
 }

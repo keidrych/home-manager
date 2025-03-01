@@ -14,7 +14,7 @@ let
       };
     in attrsOf confAtom;
 in {
-  meta.maintainers = with maintainers; [ polykernel ];
+  meta.maintainers = [ ];
 
   options = {
     wayland.windowManager.sway.swaynag = {
@@ -26,15 +26,12 @@ in {
         default = { };
         description = ''
           Configuration written to
-          <filename>$XDG_CONFIG_HOME/swaynag/config</filename>.
-          </para><para>
+          {file}`$XDG_CONFIG_HOME/swaynag/config`.
+
           See
-          <citerefentry>
-            <refentrytitle>swaynag</refentrytitle>
-            <manvolnum>5</manvolnum>
-          </citerefentry>
-          for a list of avaliable options and an example configuration.
-          Note, configurations declared under <literal>&lt;config&gt;</literal>
+          {manpage}`swaynag(5)`
+          for a list of available options and an example configuration.
+          Note, configurations declared under `<config>`
           will override the default type values of swaynag.
         '';
         example = literalExpression ''

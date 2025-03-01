@@ -15,18 +15,14 @@ let
   localVarsStr = config.lib.zsh.defineAll cfg.localVariables;
 
   aliasesStr = concatStringsSep "\n" (
-    mapAttrsToList (k: v: "alias ${k}=${lib.escapeShellArg v}") cfg.shellAliases
-  );
-
-  globalAliasesStr = concatStringsSep "\n" (
-    mapAttrsToList (k: v: "alias -g ${k}=${lib.escapeShellArg v}") cfg.shellGlobalAliases
+    mapAttrsToList (k: v: "alias -- ${lib.escapeShellArg k}=${lib.escapeShellArg v}") cfg.shellAliases
   );
 
   dirHashesStr = concatStringsSep "\n" (
     mapAttrsToList (k: v: ''hash -d ${k}="${v}"'') cfg.dirHashes
   );
 
-  zdotdir = "$HOME/" + cfg.dotDir;
+  zdotdir = "$HOME/" + lib.escapeShellArg cfg.dotDir;
 
   bindkeyCommands = {
     emacs = "bindkey -e";
@@ -38,6 +34,21 @@ let
 
   historyModule = types.submodule ({ config, ... }: {
     options = {
+      append = mkOption {
+        type = types.bool;
+        default = false;
+        description = ''
+          If set, zsh sessions will append their history list to the history
+          file, rather than replace it. Thus, multiple parallel zsh sessions
+          will all have the new entries from their history lists added to the
+          history file, in the order that they exit.
+
+          This file will still be periodically re-written to trim it when the
+          number of lines grows 20% beyond the value specified by
+          `programs.zsh.history.save`.
+        '';
+      };
+
       size = mkOption {
         type = types.int;
         default = 10000;
@@ -83,6 +94,33 @@ let
         '';
       };
 
+      ignoreAllDups = mkOption {
+        type = types.bool;
+        default = false;
+        description = ''
+          If a new command line being added to the history list
+          duplicates an older one, the older command is removed
+          from the list (even if it is not the previous event).
+        '';
+      };
+
+      saveNoDups = mkOption {
+        type = types.bool;
+        default = false;
+        description = ''
+          Do not write duplicate entries into the history file.
+        '';
+      };
+
+      findNoDups = mkOption {
+        type = types.bool;
+        default = false;
+        description = ''
+          Do not display a line previously found in the history
+          file.
+        '';
+      };
+
       ignoreSpace = mkOption {
         type = types.bool;
         default = true;
@@ -119,7 +157,7 @@ let
         description = ''
           Path to the plugin folder.
 
-          Will be added to <envar>fpath</envar> and <envar>PATH</envar>.
+          Will be added to {env}`fpath` and {env}`PATH`.
         '';
       };
 
@@ -128,7 +166,7 @@ let
         description = ''
           The name of the plugin.
 
-          Don't forget to add <option>file</option>
+          Don't forget to add {option}`file`
           if the script name does not follow convention.
         '';
       };
@@ -146,6 +184,8 @@ let
     options = {
       enable = mkEnableOption "oh-my-zsh";
 
+      package = mkPackageOption pkgs "oh-my-zsh" { };
+
       plugins = mkOption {
         default = [];
         example = [ "git" "sudo" ];
@@ -161,7 +201,7 @@ let
         example = "$HOME/my_customizations";
         description = ''
           Path to a custom oh-my-zsh package to override config of
-          oh-my-zsh. See <link xlink:href="https://github.com/robbyrussell/oh-my-zsh/wiki/Customization"/>
+          oh-my-zsh. See <https://github.com/robbyrussell/oh-my-zsh/wiki/Customization>
           for more information.
         '';
       };
@@ -188,12 +228,82 @@ let
     };
   };
 
+  historySubstringSearchModule = types.submodule {
+    options = {
+      enable = mkEnableOption "history substring search";
+      searchUpKey = mkOption {
+        type = with types; either (listOf str) str ;
+        default = [ "^[[A" ];
+        description = ''
+          The key codes to be used when searching up.
+          The default of `^[[A` may correspond to the UP key -- if not, try
+          `$terminfo[kcuu1]`.
+        '';
+      };
+      searchDownKey = mkOption {
+        type = with types; either (listOf str) str ;
+        default = [ "^[[B" ];
+        description = ''
+          The key codes to be used when searching down.
+          The default of `^[[B` may correspond to the DOWN key -- if not, try
+          `$terminfo[kcud1]`.
+        '';
+      };
+    };
+  };
+
+  syntaxHighlightingModule = types.submodule {
+    options = {
+      enable = mkEnableOption "zsh syntax highlighting";
+
+      package = mkPackageOption pkgs "zsh-syntax-highlighting" { };
+
+      highlighters = mkOption {
+        type = types.listOf types.str;
+        default = [ ];
+        example = [ "brackets" ];
+        description = ''
+          Highlighters to enable
+          See the list of highlighters: <https://github.com/zsh-users/zsh-syntax-highlighting/blob/master/docs/highlighters.md>
+        '';
+      };
+
+      patterns = mkOption {
+        type = types.attrsOf types.str;
+        default = {};
+        example = { "rm -rf *" = "fg=white,bold,bg=red"; };
+        description = ''
+          Custom syntax highlighting for user-defined patterns.
+          Reference: <https://github.com/zsh-users/zsh-syntax-highlighting/blob/master/docs/highlighters/pattern.md>
+        '';
+      };
+
+      styles = mkOption {
+        type = types.attrsOf types.str;
+        default = {};
+        example = { comment = "fg=black,bold"; };
+        description = ''
+          Custom styles for syntax highlighting.
+          See each highlighter style option: <https://github.com/zsh-users/zsh-syntax-highlighting/blob/master/docs/highlighters/main.md>
+        '';
+      };
+    };
+  };
+
 in
 
 {
+  imports = [
+    (mkRenamedOptionModule [ "programs" "zsh" "enableAutosuggestions" ] [ "programs" "zsh" "autosuggestion" "enable" ])
+    (mkRenamedOptionModule [ "programs" "zsh" "enableSyntaxHighlighting" ] [ "programs" "zsh" "syntaxHighlighting" "enable" ])
+    (mkRenamedOptionModule [ "programs" "zsh" "zproof" ] [ "programs" "zsh" "zprof" ])
+  ];
+
   options = {
     programs.zsh = {
       enable = mkEnableOption "Z shell (Zsh)";
+
+      package = mkPackageOption pkgs "zsh" { };
 
       autocd = mkOption {
         default = null;
@@ -206,7 +316,7 @@ in
       cdpath = mkOption {
         default = [];
         description = ''
-          List of paths to autocomplete calls to `cd`.
+          List of paths to autocomplete calls to {command}`cd`.
         '';
         type = types.listOf types.str;
       };
@@ -246,7 +356,7 @@ in
           }
         '';
         description = ''
-          Similar to <varname><link linkend="opt-programs.zsh.shellAliases">opt-programs.zsh.shellAliases</link></varname>,
+          Similar to [](#opt-programs.zsh.shellAliases),
           but are substituted anywhere on a line.
         '';
         type = types.attrsOf types.str;
@@ -271,9 +381,9 @@ in
         default = true;
         description = ''
           Enable zsh completion. Don't forget to add
-          <programlisting language="nix">
+          ```nix
             environment.pathsToLink = [ "/share/zsh" ];
-          </programlisting>
+          ```
           to your system configuration to get completion for system packages (e.g. systemd).
         '';
         type = types.bool;
@@ -285,14 +395,60 @@ in
         type = types.lines;
       };
 
-      enableAutosuggestions = mkOption {
+      zprof.enable = mkOption {
         default = false;
-        description = "Enable zsh autosuggestions";
+        description = ''
+          Enable zprof in your zshrc.
+        '';
       };
 
-      enableSyntaxHighlighting = mkOption {
-        default = false;
-        description = "Enable zsh syntax highlighting";
+      syntaxHighlighting = mkOption {
+        type = syntaxHighlightingModule;
+        default = {};
+        description = "Options related to zsh-syntax-highlighting.";
+      };
+
+      historySubstringSearch = mkOption {
+        type = historySubstringSearchModule;
+        default = {};
+        description = "Options related to zsh-history-substring-search.";
+      };
+
+      autosuggestion = {
+        enable = mkOption {
+          type = types.bool;
+          default = false;
+          description = "Enable zsh autosuggestions";
+        };
+
+        highlight = mkOption {
+          type = types.nullOr types.str;
+          default = null;
+          example = "fg=#ff00ff,bg=cyan,bold,underline";
+          description = ''
+            Custom styles for autosuggestion highlighting. See
+            {manpage}`zshzle(1)` for syntax.
+          '';
+        };
+
+        strategy = mkOption {
+          type = types.listOf (types.enum [ "history" "completion" "match_prev_cmd" ]);
+          default = [ "history" ];
+          description = ''
+            `ZSH_AUTOSUGGEST_STRATEGY` is an array that specifies how suggestions should be generated.
+            The strategies in the array are tried successively until a suggestion is found.
+            There are currently three built-in strategies to choose from:
+
+            - `history`: Chooses the most recent match from history.
+            - `completion`: Chooses a suggestion based on what tab-completion would suggest. (requires `zpty` module)
+            - `match_prev_cmd`: Like `history`, but chooses the most recent match whose preceding history item matches
+                the most recently executed command. Note that this strategy won't work as expected with ZSH options that
+                don't preserve the history order such as `HIST_IGNORE_ALL_DUPS` or `HIST_EXPIRE_DUPS_FIRST`.
+
+            Setting the option to an empty list `[]` will make ZSH_AUTOSUGGESTION_STRATEGY not be set automatically,
+            allowing the variable to be declared in {option}`programs.zsh.localVariables` or {option}`programs.zsh.sessionVariables`
+          '';
+        };
       };
 
       history = mkOption {
@@ -318,43 +474,43 @@ in
       initExtraBeforeCompInit = mkOption {
         default = "";
         type = types.lines;
-        description = "Extra commands that should be added to <filename>.zshrc</filename> before compinit.";
+        description = "Extra commands that should be added to {file}`.zshrc` before compinit.";
       };
 
       initExtra = mkOption {
         default = "";
         type = types.lines;
-        description = "Extra commands that should be added to <filename>.zshrc</filename>.";
+        description = "Extra commands that should be added to {file}`.zshrc`.";
       };
 
       initExtraFirst = mkOption {
         default = "";
         type = types.lines;
-        description = "Commands that should be added to top of <filename>.zshrc</filename>.";
+        description = "Commands that should be added to top of {file}`.zshrc`.";
       };
 
       envExtra = mkOption {
         default = "";
         type = types.lines;
-        description = "Extra commands that should be added to <filename>.zshenv</filename>.";
+        description = "Extra commands that should be added to {file}`.zshenv`.";
       };
 
       profileExtra = mkOption {
         default = "";
         type = types.lines;
-        description = "Extra commands that should be added to <filename>.zprofile</filename>.";
+        description = "Extra commands that should be added to {file}`.zprofile`.";
       };
 
       loginExtra = mkOption {
         default = "";
         type = types.lines;
-        description = "Extra commands that should be added to <filename>.zlogin</filename>.";
+        description = "Extra commands that should be added to {file}`.zlogin`.";
       };
 
       logoutExtra = mkOption {
         default = "";
         type = types.lines;
-        description = "Extra commands that should be added to <filename>.zlogout</filename>.";
+        description = "Extra commands that should be added to {file}`.zlogout`.";
       };
 
       plugins = mkOption {
@@ -384,7 +540,7 @@ in
             }
           ]
         '';
-        description = "Plugins to source in <filename>.zshrc</filename>.";
+        description = "Plugins to source in {file}`.zshrc`.";
       };
 
       oh-my-zsh = mkOption {
@@ -398,7 +554,7 @@ in
         default = {};
         example = { POWERLEVEL9K_LEFT_PROMPT_ELEMENTS=["dir" "vcs"]; };
         description = ''
-          Extra local variables defined at the top of <filename>.zshrc</filename>.
+          Extra local variables defined at the top of {file}`.zshrc`.
         '';
       };
     };
@@ -423,14 +579,14 @@ in
 
     (mkIf cfg.oh-my-zsh.enable {
       home.file."${relToDotDir ".zshenv"}".text = ''
-        ZSH="${pkgs.oh-my-zsh}/share/oh-my-zsh";
+        ZSH="${cfg.oh-my-zsh.package}/share/oh-my-zsh";
         ZSH_CACHE_DIR="${config.xdg.cacheHome}/oh-my-zsh";
       '';
     })
 
     (mkIf (cfg.dotDir != null) {
       home.file."${relToDotDir ".zshenv"}".text = ''
-        ZDOTDIR=${zdotdir}
+        export ZDOTDIR=${zdotdir}
       '';
 
       # When dotDir is set, only use ~/.zshenv to source ZDOTDIR/.zshenv,
@@ -443,59 +599,78 @@ in
     })
 
     {
-      home.packages = with pkgs; [ zsh ]
-        ++ optional cfg.enableCompletion nix-zsh-completions
-        ++ optional cfg.oh-my-zsh.enable oh-my-zsh;
+      home.file."${relToDotDir ".zshenv"}".text = ''
+        # Environment variables
+        . "${config.home.profileDirectory}/etc/profile.d/hm-session-vars.sh"
 
-      home.file."${relToDotDir ".zshrc"}".text = ''
-        ${cfg.initExtraFirst}
+        # Only source this once
+        if [[ -z "$__HM_ZSH_SESS_VARS_SOURCED" ]]; then
+          export __HM_ZSH_SESS_VARS_SOURCED=1
+          ${envVarsStr}
+        fi
+      '';
+    }
 
-        typeset -U path cdpath fpath manpath
+    {
+      home.packages = [ cfg.package ]
+        ++ optional cfg.enableCompletion pkgs.nix-zsh-completions
+        ++ optional cfg.oh-my-zsh.enable cfg.oh-my-zsh.package;
 
-        ${optionalString (cfg.cdpath != []) ''
+      home.file."${relToDotDir ".zshrc"}".text = concatStringsSep "\n" ([
+        # zprof must be loaded before everything else, since it
+        # benchmarks the shell initialization.
+        (optionalString cfg.zprof.enable ''
+          zmodload zsh/zprof
+        '')
+
+        cfg.initExtraFirst
+        "typeset -U path cdpath fpath manpath"
+
+        (optionalString (cfg.cdpath != []) ''
           cdpath+=(${concatStringsSep " " cfg.cdpath})
-        ''}
+        '')
 
+        ''
         for profile in ''${(z)NIX_PROFILES}; do
           fpath+=($profile/share/zsh/site-functions $profile/share/zsh/$ZSH_VERSION/functions $profile/share/zsh/vendor-completions)
         done
 
-        HELPDIR="${pkgs.zsh}/share/zsh/$ZSH_VERSION/help"
+        HELPDIR="${cfg.package}/share/zsh/$ZSH_VERSION/help"
+        ''
 
-        ${optionalString (cfg.defaultKeymap != null) ''
+        (optionalString (cfg.defaultKeymap != null) ''
           # Use ${cfg.defaultKeymap} keymap as the default.
           ${getAttr cfg.defaultKeymap bindkeyCommands}
-        ''}
+        '')
+        localVarsStr
 
-        ${localVarsStr}
+        cfg.initExtraBeforeCompInit
 
-        ${cfg.initExtraBeforeCompInit}
-
-        ${concatStrings (map (plugin: ''
+        (concatStrings (map (plugin: ''
           path+="$HOME/${pluginsDir}/${plugin.name}"
           fpath+="$HOME/${pluginsDir}/${plugin.name}"
-        '') cfg.plugins)}
+        '') cfg.plugins))
 
+        ''
         # Oh-My-Zsh/Prezto calls compinit during initialization,
         # calling it twice causes slight start up slowdown
         # as all $fpath entries will be traversed again.
         ${optionalString (cfg.enableCompletion && !cfg.oh-my-zsh.enable && !cfg.prezto.enable)
           cfg.completionInit
-        }
+        }''
 
-        ${optionalString cfg.enableAutosuggestions
-          "source ${pkgs.zsh-autosuggestions}/share/zsh-autosuggestions/zsh-autosuggestions.zsh"
-        }
+        (optionalString cfg.autosuggestion.enable ''
+          source ${pkgs.zsh-autosuggestions}/share/zsh-autosuggestions/zsh-autosuggestions.zsh
+          ${optionalString (cfg.autosuggestion.strategy != []) ''
+            ZSH_AUTOSUGGEST_STRATEGY=(${concatStringsSep " " cfg.autosuggestion.strategy})
+          ''
+          }
+        '')
+        (optionalString (cfg.autosuggestion.enable && cfg.autosuggestion.highlight != null) ''
+          ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE="${cfg.autosuggestion.highlight}"
+        '')
 
-        ${optionalString cfg.enableSyntaxHighlighting
-          "source ${pkgs.zsh-syntax-highlighting}/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"
-        }
-
-        # Environment variables
-        . "${config.home.profileDirectory}/etc/profile.d/hm-session-vars.sh"
-        ${envVarsStr}
-
-        ${optionalString cfg.oh-my-zsh.enable ''
+        (optionalString cfg.oh-my-zsh.enable ''
             # oh-my-zsh extra settings for plugins
             ${cfg.oh-my-zsh.extraConfig}
             # oh-my-zsh configuration generated by NixOS
@@ -509,10 +684,11 @@ in
               "ZSH_THEME=\"${cfg.oh-my-zsh.theme}\""
             }
             source $ZSH/oh-my-zsh.sh
-        ''}
+        '')
 
+        ''
         ${optionalString cfg.prezto.enable
-            (builtins.readFile "${pkgs.zsh-prezto}/share/zsh-prezto/runcoms/zshrc")}
+            (builtins.readFile "${cfg.prezto.package}/share/zsh-prezto/runcoms/zshrc")}
 
         ${concatStrings (map (plugin: ''
           if [[ -f "$HOME/${pluginsDir}/${plugin.name}/${plugin.file}" ]]; then
@@ -531,7 +707,11 @@ in
         mkdir -p "$(dirname "$HISTFILE")"
 
         setopt HIST_FCNTL_LOCK
+        ${if cfg.history.append then "setopt" else "unsetopt"} APPEND_HISTORY
         ${if cfg.history.ignoreDups then "setopt" else "unsetopt"} HIST_IGNORE_DUPS
+        ${if cfg.history.ignoreAllDups then "setopt" else "unsetopt"} HIST_IGNORE_ALL_DUPS
+        ${if cfg.history.saveNoDups then "setopt" else "unsetopt"} HIST_SAVE_NO_DUPS
+        ${if cfg.history.findNoDups then "setopt" else "unsetopt"} HIST_FIND_NO_DUPS
         ${if cfg.history.ignoreSpace then "setopt" else "unsetopt"} HIST_IGNORE_SPACE
         ${if cfg.history.expireDuplicatesFirst then "setopt" else "unsetopt"} HIST_EXPIRE_DUPS_FIRST
         ${if cfg.history.share then "setopt" else "unsetopt"} SHARE_HISTORY
@@ -542,13 +722,52 @@ in
 
         # Aliases
         ${aliasesStr}
-
-        # Global Aliases
-        ${globalAliasesStr}
-
+        ''
+      ]
+      ++ (mapAttrsToList (k: v: "alias -g -- ${lib.escapeShellArg k}=${lib.escapeShellArg v}") cfg.shellGlobalAliases)
+      ++ [ (''
         # Named Directory Hashes
         ${dirHashesStr}
-      '';
+        '')
+
+        (optionalString cfg.syntaxHighlighting.enable
+          # Load zsh-syntax-highlighting after all custom widgets have been created
+          # https://github.com/zsh-users/zsh-syntax-highlighting#faq
+        ''
+          source ${cfg.syntaxHighlighting.package}/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
+          ZSH_HIGHLIGHT_HIGHLIGHTERS+=(${lib.concatStringsSep " " (map lib.escapeShellArg cfg.syntaxHighlighting.highlighters)})
+          ${lib.concatStringsSep "\n" (
+              lib.mapAttrsToList
+                (name: value: "ZSH_HIGHLIGHT_STYLES+=(${lib.escapeShellArg name} ${lib.escapeShellArg value})")
+                cfg.syntaxHighlighting.styles
+          )}
+          ${lib.concatStringsSep "\n" (
+              lib.mapAttrsToList
+                (name: value: "ZSH_HIGHLIGHT_PATTERNS+=(${lib.escapeShellArg name} ${lib.escapeShellArg value})")
+                cfg.syntaxHighlighting.patterns
+          )}
+        '')
+
+        (optionalString (cfg.historySubstringSearch.enable or false)
+          # Load zsh-history-substring-search after zsh-syntax-highlighting
+          # https://github.com/zsh-users/zsh-history-substring-search#usage
+        ''
+          source ${pkgs.zsh-history-substring-search}/share/zsh-history-substring-search/zsh-history-substring-search.zsh
+          ${lib.concatMapStringsSep "\n"
+            (upKey: "bindkey \"${upKey}\" history-substring-search-up")
+            (lib.toList cfg.historySubstringSearch.searchUpKey)
+          }
+          ${lib.concatMapStringsSep "\n"
+            (downKey: "bindkey \"${downKey}\" history-substring-search-down")
+            (lib.toList cfg.historySubstringSearch.searchDownKey)
+          }
+        '')
+
+        (optionalString cfg.zprof.enable
+        ''
+          zprof
+        '')
+      ]);
     }
 
     (mkIf cfg.oh-my-zsh.enable {

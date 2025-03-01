@@ -6,7 +6,6 @@ let
 
   cfg = config.programs.irssi;
 
-  boolStr = b: if b then "yes" else "no";
   quoteStr = s: escape [ ''"'' ] s;
 
   # Comma followed by newline.
@@ -24,6 +23,11 @@ let
         type = "${v.type}";
         nick = "${quoteStr v.nick}";
         autosendcmd = "${concatMapStringsSep ";" quoteStr v.autoCommands}";
+        ${
+          lib.optionalString (v.saslExternal) ''
+            sasl_username = "${quoteStr v.nick}";
+              sasl_mechanism = "EXTERNAL";''
+        }
       };
     ''));
 
@@ -33,25 +37,26 @@ let
         chatnet = "${k}";
         address = "${v.server.address}";
         port = "${toString v.server.port}";
-        use_ssl = "${boolStr v.server.ssl.enable}";
-        ssl_verify = "${boolStr v.server.ssl.verify}";
-        autoconnect = "${boolStr v.server.autoConnect}";
+        use_ssl = "${lib.hm.booleans.yesNo v.server.ssl.enable}";
+        ssl_verify = "${lib.hm.booleans.yesNo v.server.ssl.verify}";
+        autoconnect = "${lib.hm.booleans.yesNo v.server.autoConnect}";
         ${
-          lib.optionalString (v.server.ssl.certificateFile != null) ''
+          optionalString (v.server.ssl.certificateFile != null) ''
             ssl_cert = "${v.server.ssl.certificateFile}";
           ''
         }
       }
     ''));
 
-  channelString = concatStringsSep cnl (flip mapAttrsToList cfg.networks (k: v:
-    concatStringsSep cnl (flip mapAttrsToList v.channels (c: cv: ''
-      {
-        chatnet = "${k}";
-        name = "${c}";
-        autojoin = "${boolStr cv.autoJoin}";
-      }
-    ''))));
+  channelString = concatStringsSep cnl (concatLists
+    (flip mapAttrsToList cfg.networks (k: v:
+      (flip mapAttrsToList v.channels (c: cv: ''
+        {
+          chatnet = "${k}";
+          name = "${c}";
+          autojoin = "${lib.hm.booleans.yesNo cv.autoJoin}";
+        }
+      '')))));
 
   channelType = types.submodule {
     options = {
@@ -142,6 +147,15 @@ let
         type = types.attrsOf channelType;
         default = { };
       };
+
+      saslExternal = mkOption {
+        type = types.bool;
+        default = false;
+        description = ''
+          Enable SASL external authentication. This requires setting a path in
+          [](#opt-programs.irssi.networks._name_.server.ssl.certificateFile).
+        '';
+      };
     };
   });
 
@@ -154,7 +168,7 @@ in {
       extraConfig = mkOption {
         default = "";
         description = "These lines are appended to the Irssi configuration.";
-        type = types.str;
+        type = types.lines;
       };
 
       aliases = mkOption {
@@ -171,10 +185,10 @@ in {
         default = { };
         example = literalExpression ''
           {
-            freenode = {
+            liberachat = {
               nick = "hmuser";
               server = {
-                address = "chat.freenode.net";
+                address = "irc.libera.chat";
                 port = 6697;
                 autoConnect = true;
               };

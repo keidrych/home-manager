@@ -1,15 +1,13 @@
-{ pkgs, ... }: {
-  config = {
-    programs = {
-      scmpuff = {
-        enable = true;
-        enableBashIntegration = false;
-      };
-      bash.enable = true;
+{
+  programs = {
+    scmpuff = {
+      enable = true;
+      enableBashIntegration = false;
     };
-
-    nmt.script = ''
-      assertFileNotRegex home-files/.bashrc '${pkgs.scmpuff}/bin/scmpuff'
-    '';
+    bash.enable = true;
   };
+
+  nmt.script = ''
+    assertFileNotRegex home-files/.bashrc '@scmpuff@'
+  '';
 }

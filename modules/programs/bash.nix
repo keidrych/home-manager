@@ -6,9 +6,15 @@ let
 
   cfg = config.programs.bash;
 
-in
+  writeBashScript = name: text:
+    pkgs.writeTextFile {
+      inherit name text;
+      checkPhase = ''
+        ${pkgs.stdenv.shellDryRun} "$target"
+      '';
+    };
 
-{
+in {
   meta.maintainers = [ maintainers.rycee ];
 
   imports = [
@@ -23,8 +29,29 @@ in
     programs.bash = {
       enable = mkEnableOption "GNU Bourne-Again SHell";
 
+      package = mkPackageOption pkgs "bash" { default = "bashInteractive"; };
+
+      enableCompletion = mkOption {
+        type = types.bool;
+        default = true;
+        description = ''
+          Whether to enable Bash completion for all interactive Bash shells.
+
+          Note, if you use NixOS or nix-darwin and do not have Bash completion
+          enabled in the system configuration, then make sure to add
+
+          ```nix
+            environment.pathsToLink = [ "/share/bash-completion" ];
+          ```
+
+          to your system configuration to get completion for system packages.
+          Note, the legacy {file}`/etc/bash_completion.d` path is
+          not supported by Home Manager.
+        '';
+      };
+
       historySize = mkOption {
-        type = types.int;
+        type = types.nullOr types.int;
         default = 10000;
         description = "Number of history lines to keep in memory.";
       };
@@ -36,26 +63,24 @@ in
       };
 
       historyFileSize = mkOption {
-        type = types.int;
+        type = types.nullOr types.int;
         default = 100000;
         description = "Number of history lines to keep on file.";
       };
 
       historyControl = mkOption {
-        type = types.listOf (types.enum [
-          "erasedups"
-          "ignoredups"
-          "ignorespace"
-        ]);
-        default = [];
+        type = types.listOf
+          (types.enum [ "erasedups" "ignoredups" "ignorespace" "ignoreboth" ]);
+        default = [ ];
         description = "Controlling how commands are saved on the history list.";
       };
 
       historyIgnore = mkOption {
         type = types.listOf types.str;
-        default = [];
+        default = [ ];
         example = [ "ls" "cd" "exit" ];
-        description = "List of commands that should not be saved to the history list.";
+        description =
+          "List of commands that should not be saved to the history list.";
       };
 
       shellOptions = mkOption {
@@ -75,18 +100,15 @@ in
           # Warn if closing shell with running jobs.
           "checkjobs"
         ];
-        example = [
-          "extglob"
-          "-cdspell"
-        ];
+        example = [ "extglob" "-cdspell" ];
         description = ''
           Shell options to set. Prefix an option with
-          <quote><literal>-</literal></quote> to unset.
+          "`-`" to unset.
         '';
       };
 
       sessionVariables = mkOption {
-        default = {};
+        default = { };
         type = types.attrs;
         example = { MAILCHECK = 30; };
         description = ''
@@ -95,7 +117,7 @@ in
       };
 
       shellAliases = mkOption {
-        default = {};
+        default = { };
         type = types.attrsOf types.str;
         example = literalExpression ''
           {
@@ -131,7 +153,7 @@ in
         default = "";
         type = types.lines;
         description = ''
-          Extra commands that should be placed in <filename>~/.bashrc</filename>.
+          Extra commands that should be placed in {file}`~/.bashrc`.
           Note that these commands will be run even in non-interactive shells.
         '';
       };
@@ -147,71 +169,76 @@ in
     };
   };
 
-  config = (
-    let
-      aliasesStr = concatStringsSep "\n" (
-        mapAttrsToList (k: v: "alias ${k}=${escapeShellArg v}") cfg.shellAliases
-      );
+  config = let
+    aliasesStr = concatStringsSep "\n"
+      (mapAttrsToList (k: v: "alias ${k}=${escapeShellArg v}")
+        cfg.shellAliases);
 
-      shoptsStr = let
-        switch = v: if hasPrefix "-" v then "-u" else "-s";
-      in concatStringsSep "\n" (
-          map (v: "shopt ${switch v} ${removePrefix "-" v}") cfg.shellOptions
-      );
+    shoptsStr = let switch = v: if hasPrefix "-" v then "-u" else "-s";
+    in concatStringsSep "\n"
+    (map (v: "shopt ${switch v} ${removePrefix "-" v}") cfg.shellOptions);
 
-      sessionVarsStr = config.lib.shell.exportAll cfg.sessionVariables;
+    sessionVarsStr = config.lib.shell.exportAll cfg.sessionVariables;
 
-      historyControlStr =
-        concatStringsSep "\n" (mapAttrsToList (n: v: "${n}=${v}") (
-          {
-            HISTFILESIZE = toString cfg.historyFileSize;
-            HISTSIZE = toString cfg.historySize;
-          }
-          // optionalAttrs (cfg.historyFile != null) {
-            HISTFILE = "\"${cfg.historyFile}\"";
-          }
-          // optionalAttrs (cfg.historyControl != []) {
-            HISTCONTROL = concatStringsSep ":" cfg.historyControl;
-          }
-          // optionalAttrs (cfg.historyIgnore != []) {
-            HISTIGNORE = concatStringsSep ":" cfg.historyIgnore;
-          }
-        ));
-    in mkIf cfg.enable {
-      home.file.".bash_profile".source = pkgs.writeShellScript "bash_profile" ''
-        # include .profile if it exists
-        [[ -f ~/.profile ]] && . ~/.profile
+    historyControlStr = (concatStringsSep "\n"
+      (mapAttrsToList (n: v: "${n}=${v}")
+        (optionalAttrs (cfg.historyFileSize != null) {
+          HISTFILESIZE = toString cfg.historyFileSize;
+        } // optionalAttrs (cfg.historySize != null) {
+          HISTSIZE = toString cfg.historySize;
+        } // optionalAttrs (cfg.historyFile != null) {
+          HISTFILE = ''"${cfg.historyFile}"'';
+        } // optionalAttrs (cfg.historyControl != [ ]) {
+          HISTCONTROL = concatStringsSep ":" cfg.historyControl;
+        } // optionalAttrs (cfg.historyIgnore != [ ]) {
+          HISTIGNORE = escapeShellArg (concatStringsSep ":" cfg.historyIgnore);
+        }) ++ optional (cfg.historyFile != null)
+        ''mkdir -p "$(dirname "$HISTFILE")"''));
+  in mkIf cfg.enable {
+    home.packages = [ cfg.package ];
 
-        # include .bashrc if it exists
-        [[ -f ~/.bashrc ]] && . ~/.bashrc
-      '';
+    home.file.".bash_profile".source = writeBashScript "bash_profile" ''
+      # include .profile if it exists
+      [[ -f ~/.profile ]] && . ~/.profile
 
-      home.file.".profile".source = pkgs.writeShellScript "profile" ''
-        . "${config.home.profileDirectory}/etc/profile.d/hm-session-vars.sh"
+      # include .bashrc if it exists
+      [[ -f ~/.bashrc ]] && . ~/.bashrc
+    '';
 
-        ${sessionVarsStr}
+    # If completion is enabled then make sure it is sourced very early. This
+    # is to avoid problems if any other initialization code attempts to set up
+    # completion.
+    programs.bash.initExtra = mkIf cfg.enableCompletion (mkOrder 100 ''
+      if [[ ! -v BASH_COMPLETION_VERSINFO ]]; then
+        . "${pkgs.bash-completion}/etc/profile.d/bash_completion.sh"
+      fi
+    '');
 
-        ${cfg.profileExtra}
-      '';
+    home.file.".profile".source = writeBashScript "profile" ''
+      . "${config.home.profileDirectory}/etc/profile.d/hm-session-vars.sh"
 
-      home.file.".bashrc".source = pkgs.writeShellScript "bashrc" ''
-        ${cfg.bashrcExtra}
+      ${sessionVarsStr}
 
-        # Commands that should be applied only for interactive shells.
-        [[ $- == *i* ]] || return
+      ${cfg.profileExtra}
+    '';
 
-        ${historyControlStr}
+    home.file.".bashrc".source = writeBashScript "bashrc" ''
+      ${cfg.bashrcExtra}
 
-        ${shoptsStr}
+      # Commands that should be applied only for interactive shells.
+      [[ $- == *i* ]] || return
 
-        ${aliasesStr}
+      ${historyControlStr}
 
-        ${cfg.initExtra}
-      '';
+      ${shoptsStr}
 
-      home.file.".bash_logout" = mkIf (cfg.logoutExtra != "") {
-        source = pkgs.writeShellScript "bash_logout" cfg.logoutExtra;
-      };
-    }
-  );
+      ${aliasesStr}
+
+      ${cfg.initExtra}
+    '';
+
+    home.file.".bash_logout" = mkIf (cfg.logoutExtra != "") {
+      source = writeBashScript "bash_logout" cfg.logoutExtra;
+    };
+  };
 }

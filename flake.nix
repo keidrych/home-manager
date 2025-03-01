@@ -1,60 +1,68 @@
 {
   description = "Home Manager for Nix";
 
-  outputs = { self, nixpkgs }:
-    let
-      # List of systems supported by home-manager binary
-      supportedSystems = nixpkgs.lib.platforms.unix;
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
-      # Function to generate a set based on supported systems
-      forAllSystems = f:
-        nixpkgs.lib.genAttrs supportedSystems (system: f system);
+  outputs = { self, nixpkgs, ... }:
+    {
+      nixosModules = rec {
+        home-manager = ./nixos;
+        default = home-manager;
+      };
 
-      nixpkgsFor = forAllSystems (system: import nixpkgs { inherit system; });
-    in rec {
-      nixosModules.home-manager = import ./nixos;
-      nixosModule = self.nixosModules.home-manager;
+      darwinModules = rec {
+        home-manager = ./nix-darwin;
+        default = home-manager;
+      };
 
-      darwinModules.home-manager = import ./nix-darwin;
-      darwinModule = self.darwinModules.home-manager;
+      flakeModules = rec {
+        home-manager = ./flake-module.nix;
+        default = home-manager;
+      };
+
+      templates = {
+        default = self.templates.standalone;
+        nixos = {
+          path = ./templates/nixos;
+          description = "Home Manager as a NixOS module,";
+        };
+        nix-darwin = {
+          path = ./templates/nix-darwin;
+          description = "Home Manager as a nix-darwin module,";
+        };
+        standalone = {
+          path = ./templates/standalone;
+          description = "Standalone setup";
+        };
+      };
+
+      lib = import ./lib { inherit (nixpkgs) lib; };
+    } // (let
+      forAllSystems = nixpkgs.lib.genAttrs nixpkgs.lib.systems.flakeExposed;
+    in {
+      formatter = forAllSystems (system:
+        let pkgs = nixpkgs.legacyPackages.${system};
+        in pkgs.linkFarm "format" [{
+          name = "bin/format";
+          path = ./format;
+        }]);
 
       packages = forAllSystems (system:
-        let docs = import ./docs { pkgs = nixpkgsFor.${system}; };
-        in {
-          home-manager = nixpkgsFor.${system}.callPackage ./home-manager { };
-          docs-html = docs.manual.html;
-          docs-manpages = docs.manPages;
-          docs-json = docs.options.json;
-        });
-
-      defaultPackage =
-        forAllSystems (system: self.packages.${system}.home-manager);
-
-      apps = forAllSystems (system: {
-        home-manager = {
-          type = "app";
-          program = "${defaultPackage.${system}}/bin/home-manager";
-        };
-      });
-
-      defaultApp = forAllSystems (system: apps.${system}.home-manager);
-
-      lib = {
-        hm = import ./modules/lib { lib = nixpkgs.lib; };
-        homeManagerConfiguration = { configuration, system, homeDirectory
-          , username, extraModules ? [ ], extraSpecialArgs ? { }
-          , pkgs ? builtins.getAttr system nixpkgs.outputs.legacyPackages
-          , check ? true, stateVersion ? "20.09" }@args:
-          assert nixpkgs.lib.versionAtLeast stateVersion "20.09";
-
-          import ./modules {
-            inherit pkgs check extraSpecialArgs;
-            configuration = { ... }: {
-              imports = [ configuration ] ++ extraModules;
-              home = { inherit homeDirectory stateVersion username; };
-              nixpkgs = { inherit (pkgs) config overlays; };
-            };
+        let
+          pkgs = nixpkgs.legacyPackages.${system};
+          releaseInfo = nixpkgs.lib.importJSON ./release.json;
+          docs = import ./docs {
+            inherit pkgs;
+            inherit (releaseInfo) release isReleaseBranch;
           };
-      };
-    };
+          hmPkg = pkgs.callPackage ./home-manager { path = "${self}"; };
+        in {
+          default = hmPkg;
+          home-manager = hmPkg;
+
+          docs-html = docs.manual.html;
+          docs-json = docs.options.json;
+          docs-manpages = docs.manPages;
+        });
+    });
 }

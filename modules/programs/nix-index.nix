@@ -1,7 +1,8 @@
 { config, lib, pkgs, ... }:
 let cfg = config.programs.nix-index;
 in {
-  meta.maintainers = with lib.hm.maintainers; [ ambroisie ];
+  meta.maintainers =
+    [ lib.hm.maintainers.ambroisie lib.maintainers.khaneliman ];
 
   options.programs.nix-index = with lib; {
     enable = mkEnableOption "nix-index, a file database for nixpkgs";
@@ -10,20 +11,17 @@ in {
       type = types.package;
       default = pkgs.nix-index;
       defaultText = literalExpression "pkgs.nix-index";
-      description = "Package providing the <command>nix-index</command> tool.";
+      description = "Package providing the {command}`nix-index` tool.";
     };
 
-    enableBashIntegration = mkEnableOption "Bash integration" // {
-      default = true;
-    };
+    enableBashIntegration =
+      lib.hm.shell.mkBashIntegrationOption { inherit config; };
 
-    enableZshIntegration = mkEnableOption "Zsh integration" // {
-      default = true;
-    };
+    enableFishIntegration =
+      lib.hm.shell.mkFishIntegrationOption { inherit config; };
 
-    enableFishIntegration = mkEnableOption "Fish integration" // {
-      default = true;
-    };
+    enableZshIntegration =
+      lib.hm.shell.mkZshIntegrationOption { inherit config; };
   };
 
   config = lib.mkIf cfg.enable {
@@ -48,7 +46,7 @@ in {
     '';
 
     # See https://github.com/bennofs/nix-index/issues/126
-    programs.fish.shellInit = let
+    programs.fish.interactiveShellInit = let
       wrapper = pkgs.writeScript "command-not-found" ''
         #!${pkgs.bash}/bin/bash
         source ${cfg.package}/etc/profile.d/command-not-found.sh

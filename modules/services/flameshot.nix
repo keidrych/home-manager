@@ -20,11 +20,11 @@ in {
       type = types.package;
       default = pkgs.flameshot;
       defaultText = literalExpression "pkgs.flameshot";
-      description = "Package providing <command>flameshot</command>.";
+      description = "Package providing {command}`flameshot`.";
     };
 
     settings = mkOption {
-      type = iniFormat.type;
+      inherit (iniFormat) type;
       default = { };
       example = {
         General = {
@@ -34,7 +34,7 @@ in {
       };
       description = ''
         Configuration to use for Flameshot. See
-        <link xlink:href="https://github.com/flameshot-org/flameshot/blob/master/flameshot.example.ini"/>
+        <https://github.com/flameshot-org/flameshot/blob/master/flameshot.example.ini>
         for available options.
       '';
     };
@@ -64,7 +64,7 @@ in {
       Install = { WantedBy = [ "graphical-session.target" ]; };
 
       Service = {
-        Environment = "PATH=${config.home.profileDirectory}/bin";
+        Environment = [ "PATH=${config.home.profileDirectory}/bin" ];
         ExecStart = "${cfg.package}/bin/flameshot";
         Restart = "on-abort";
 
